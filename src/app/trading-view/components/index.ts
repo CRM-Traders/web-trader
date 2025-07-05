@@ -1,5 +1,3 @@
-export { LightweightChart } from "@/app/trading-view/components/TradingChart/TradingChart";
-
 export type {
   ChartConfiguration,
   TradingViewWidget,

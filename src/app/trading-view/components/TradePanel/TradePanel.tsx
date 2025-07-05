@@ -29,7 +29,7 @@ export function TradePanel({
   const [total, setTotal] = useState<string>("");
   const [sliderValue, setSliderValue] = useState<number>(0);
 
-  const { selectedSymbol, marketData } = useTradingStore();
+  const { selectedSymbol, marketData, placeOrder } = useTradingStore();
 
   // Update price when market data changes
   useEffect(() => {
@@ -112,29 +112,14 @@ export function TradePanel({
         return;
       }
 
-      // Check balance
-      if (side === "buy" && Number.parseFloat(total) > quoteBalance) {
-        alert(`Insufficient ${quoteCurrency} balance`);
-        return;
-      }
-
-      if (side === "sell" && Number.parseFloat(amount) > baseBalance) {
-        alert(`Insufficient ${baseCurrency} balance`);
-        return;
-      }
-
-      // Simulate order placement
-      console.log("Placing order:", {
+      // Place order using store
+      await placeOrder({
         symbol: selectedSymbol,
-        side,
-        type: orderType,
+        side: side.toUpperCase() as "BUY" | "SELL",
+        type: orderType.toUpperCase() as "LIMIT" | "MARKET",
         price: orderType === "limit" ? Number.parseFloat(price) : undefined,
-        amount: Number.parseFloat(amount),
-        total: Number.parseFloat(total),
+        quantity: Number.parseFloat(amount),
       });
-
-      // In a real app, you would call your API here
-      // await tradingService.placeOrder(...)
 
       // Reset form
       setAmount("");
@@ -146,9 +131,9 @@ export function TradePanel({
 
       // Show success message
       alert(`${side.toUpperCase()} order placed successfully`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to place order:", error);
-      alert("Failed to place order");
+      alert(error.message || "Failed to place order");
     }
   };
 

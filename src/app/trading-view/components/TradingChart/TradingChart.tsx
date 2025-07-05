@@ -1,13 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createChart, ColorType } from "lightweight-charts";
-import type {
-  IChartApi,
-  ISeriesApi,
-  CandlestickData,
-  HistogramData,
-} from "lightweight-charts";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -19,181 +12,91 @@ import {
 import { useTradingStore } from "@/app/trading-view/store/tradingViewStore";
 import { Loader } from "lucide-react";
 
-interface LightweightChartProps {
+interface TradingChartProps {
   symbol: string;
 }
 
-interface KlineData {
-  time: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume?: number;
-}
-
-export function LightweightChart({ symbol }: LightweightChartProps) {
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
-
-  const [timeframe, setTimeframe] = useState("1d");
-  const [chartType, setChartType] = useState("candlestick");
+export function TradingChart({ symbol }: TradingChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [timeframe, setTimeframe] = useState("1D");
+  const [chartType, setChartType] = useState("1");
   const [isLoading, setIsLoading] = useState(true);
   const { marketData } = useTradingStore();
 
-  const fetchCandlestickData = async (
-    sym: string,
-    interval: string
-  ): Promise<KlineData[]> => {
-    try {
-      const formattedSymbol = sym.replace("/", "");
-      const response = await fetch(
-        `https://api.binance.com/api/v3/klines?symbol=${formattedSymbol}&interval=${interval}&limit=100`
-      );
-      const data = await response.json();
-
-      return data.map((kline: any[]) => ({
-        time: new Date(kline[0]).toISOString().split("T")[0],
-        open: Number.parseFloat(kline[1]),
-        high: Number.parseFloat(kline[2]),
-        low: Number.parseFloat(kline[3]),
-        close: Number.parseFloat(kline[4]),
-        volume: Number.parseFloat(kline[5]),
-      }));
-    } catch (error) {
-      console.error("Failed to fetch candlestick data:", error);
-      return [];
-    }
+  // Format symbol for TradingView (e.g., BTC/USDT -> BINANCE:BTCUSDT)
+  const formatSymbolForTradingView = (sym: string) => {
+    if (!sym) return "BINANCE:BTCUSDT";
+    return `BINANCE:${sym.replace("/", "")}`;
   };
 
-  // Initialize chart
+  // Initialize TradingView widget using the script tag method
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!containerRef.current || !symbol) return;
 
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: "#1a1a1a" },
-        textColor: "#d1d4dc",
-      },
-      grid: {
-        vertLines: { color: "#2a2a2a" },
-        horzLines: { color: "#2a2a2a" },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: "#485c7b",
-      },
-      timeScale: {
-        borderColor: "#485c7b",
-        timeVisible: true,
-        secondsVisible: false,
-      },
-    });
+    // Clear previous content
+    containerRef.current.innerHTML = "";
 
-    chartRef.current = chart;
+    // Create the script element with widget configuration
+    const script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src =
+      "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.async = true;
 
-    // For lightweight-charts v5.x, use addSeries instead of addCandlestickSeries
-    const candlestickSeries = chart.addSeries("Candlestick", {
-      upColor: "#26a69a",
-      downColor: "#ef5350",
-      borderVisible: false,
-      wickUpColor: "#26a69a",
-      wickDownColor: "#ef5350",
-    });
-
-    candlestickSeriesRef.current = candlestickSeries;
-
-    // For lightweight-charts v5.x, use addSeries instead of addHistogramSeries
-    const volumeSeries = chart.addSeries("Histogram", {
-      color: "#26a69a",
-      priceFormat: {
-        type: "volume",
+    // Widget configuration as JSON
+    const config = {
+      autosize: true,
+      symbol: formatSymbolForTradingView(symbol),
+      interval: timeframe,
+      timezone: "Etc/UTC",
+      theme: "dark",
+      style: chartType,
+      locale: "en",
+      toolbar_bg: "#f1f3f6",
+      enable_publishing: false,
+      allow_symbol_change: false,
+      hide_top_toolbar: false,
+      hide_legend: false,
+      save_image: false,
+      studies: ["Volume@tv-basicstudies"],
+      overrides: {
+        "paneProperties.background": "#1a1a1a",
+        "paneProperties.vertGridProperties.color": "#2a2a2a",
+        "paneProperties.horzGridProperties.color": "#2a2a2a",
       },
-      priceScaleId: "",
-      scaleMargins: {
-        top: 0.8,
-        bottom: 0,
-      },
-    });
-
-    volumeSeriesRef.current = volumeSeries;
-
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
-        });
-      }
     };
 
-    window.addEventListener("resize", handleResize);
+    // Add the configuration as script content
+    script.innerHTML = JSON.stringify(config);
+
+    // Create wrapper div for the widget
+    const widgetDiv = document.createElement("div");
+    widgetDiv.className = "tradingview-widget-container";
+    widgetDiv.style.height = "100%";
+    widgetDiv.style.width = "100%";
+
+    const innerDiv = document.createElement("div");
+    innerDiv.className = "tradingview-widget-container__widget";
+    innerDiv.style.height = "calc(100% - 32px)";
+    innerDiv.style.width = "100%";
+
+    widgetDiv.appendChild(innerDiv);
+    widgetDiv.appendChild(script);
+
+    containerRef.current.appendChild(widgetDiv);
+
+    // Set loading to false after a short delay
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 2000);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
-      chart.remove();
-    };
-  }, []);
-
-  // Load data when symbol or timeframe changes
-  useEffect(() => {
-    if (!symbol || !candlestickSeriesRef.current || !volumeSeriesRef.current)
-      return;
-
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        // Map timeframe to Binance interval
-        const intervalMap: { [key: string]: string } = {
-          "1m": "1m",
-          "5m": "5m",
-          "15m": "15m",
-          "1h": "1h",
-          "4h": "4h",
-          "1d": "1d",
-          "1w": "1w",
-        };
-
-        const data = await fetchCandlestickData(
-          symbol,
-          intervalMap[timeframe] || "1d"
-        );
-
-        if (data.length > 0) {
-          // Set candlestick data
-          const candlestickData: CandlestickData[] = data.map((d) => ({
-            time: d.time,
-            open: d.open,
-            high: d.high,
-            low: d.low,
-            close: d.close,
-          }));
-
-          candlestickSeriesRef.current?.setData(candlestickData);
-
-          // Set volume data
-          const volumeData: HistogramData[] = data.map((d) => ({
-            time: d.time,
-            value: d.volume || 0,
-            color: d.close >= d.open ? "#26a69a" : "#ef5350",
-          }));
-
-          volumeSeriesRef.current?.setData(volumeData);
-        }
-      } catch (error) {
-        console.error("Error loading chart data:", error);
-      } finally {
-        setIsLoading(false);
+      clearTimeout(timer);
+      if (containerRef.current) {
+        containerRef.current.innerHTML = "";
       }
     };
-
-    loadData();
-  }, [symbol, timeframe]);
+  }, [symbol, timeframe, chartType]);
 
   return (
     <div className="relative h-full w-full">
@@ -229,33 +132,34 @@ export function LightweightChart({ symbol }: LightweightChartProps) {
               <SelectValue placeholder="Chart Type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="candlestick">Candles</SelectItem>
-              <SelectItem value="line">Line</SelectItem>
-              <SelectItem value="area">Area</SelectItem>
+              <SelectItem value="1">Candles</SelectItem>
+              <SelectItem value="2">Line</SelectItem>
+              <SelectItem value="3">Area</SelectItem>
+              <SelectItem value="8">Bars</SelectItem>
             </SelectContent>
           </Select>
 
           <Tabs value={timeframe} onValueChange={setTimeframe} className="h-8">
             <TabsList>
-              <TabsTrigger value="1m" className="h-7 px-2 text-xs">
+              <TabsTrigger value="1" className="h-7 px-2 text-xs">
                 1m
               </TabsTrigger>
-              <TabsTrigger value="5m" className="h-7 px-2 text-xs">
+              <TabsTrigger value="5" className="h-7 px-2 text-xs">
                 5m
               </TabsTrigger>
-              <TabsTrigger value="15m" className="h-7 px-2 text-xs">
+              <TabsTrigger value="15" className="h-7 px-2 text-xs">
                 15m
               </TabsTrigger>
-              <TabsTrigger value="1h" className="h-7 px-2 text-xs">
+              <TabsTrigger value="60" className="h-7 px-2 text-xs">
                 1h
               </TabsTrigger>
-              <TabsTrigger value="4h" className="h-7 px-2 text-xs">
+              <TabsTrigger value="240" className="h-7 px-2 text-xs">
                 4h
               </TabsTrigger>
-              <TabsTrigger value="1d" className="h-7 px-2 text-xs">
+              <TabsTrigger value="1D" className="h-7 px-2 text-xs">
                 1D
               </TabsTrigger>
-              <TabsTrigger value="1w" className="h-7 px-2 text-xs">
+              <TabsTrigger value="1W" className="h-7 px-2 text-xs">
                 1W
               </TabsTrigger>
             </TabsList>
@@ -263,7 +167,7 @@ export function LightweightChart({ symbol }: LightweightChartProps) {
         </div>
       </div>
 
-      <div ref={chartContainerRef} className="h-[calc(100%-56px)] w-full" />
+      <div ref={containerRef} className="h-[calc(100%-56px)] w-full" />
     </div>
   );
 }
