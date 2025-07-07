@@ -86,8 +86,13 @@ export function WalletBalance() {
             No balances to display
           </div>
         ) : (
-          displayBalances.map((wallet) => (
-            <div key={wallet.id} className="space-y-2">
+          displayBalances.map((wallet, index) => (
+            <div
+              key={`${wallet.currency}-${wallet.id || "unknown"}-${
+                wallet.lastPriceUpdate || Date.now()
+              }-${index}`}
+              className="space-y-2"
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm">{wallet.currency}</span>
@@ -144,10 +149,13 @@ export function WalletBalance() {
                   )}
                 </div>
                 {wallet.lastPriceUpdate && (
-                  <span title={new Date(wallet.lastPriceUpdate).toLocaleString()}>
-                    Updated: {new Date(wallet.lastPriceUpdate).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit'
+                  <span
+                    title={new Date(wallet.lastPriceUpdate).toLocaleString()}
+                  >
+                    Updated:{" "}
+                    {new Date(wallet.lastPriceUpdate).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
                     })}
                   </span>
                 )}
@@ -160,30 +168,41 @@ export function WalletBalance() {
           ))
         )}
 
-        {!showAllBalances && nonZeroBalances.length > tradingPairBalances.length && (
-          <div className="pt-2 border-t">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-muted-foreground">
-                Total Portfolio: ${nonZeroBalances.reduce((total, wallet) => total + wallet.usdEquivalent, 0).toFixed(2)} USD
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAllBalances(true)}
-                className="h-6 px-2 text-xs"
-              >
-                Show All ({nonZeroBalances.length})
-              </Button>
+        {!showAllBalances &&
+          nonZeroBalances.length > tradingPairBalances.length && (
+            <div className="pt-2 border-t">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground">
+                  Total Portfolio: $
+                  {nonZeroBalances
+                    .reduce((total, wallet) => total + wallet.usdEquivalent, 0)
+                    .toFixed(2)}{" "}
+                  USD
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAllBalances(true)}
+                  className="h-6 px-2 text-xs"
+                >
+                  Show All ({nonZeroBalances.length})
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {showAllBalances && (
           <div className="pt-2 border-t space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Total Portfolio Value:</span>
+              <span className="text-sm font-medium">
+                Total Portfolio Value:
+              </span>
               <span className="text-sm font-mono font-medium">
-                ${nonZeroBalances.reduce((total, wallet) => total + wallet.usdEquivalent, 0).toFixed(2)} USD
+                $
+                {nonZeroBalances
+                  .reduce((total, wallet) => total + wallet.usdEquivalent, 0)
+                  .toFixed(2)}{" "}
+                USD
               </span>
             </div>
             <div className="text-xs text-muted-foreground text-center">

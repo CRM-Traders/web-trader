@@ -32,14 +32,22 @@ export function TradePanel({
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
 
-  const { selectedSymbol, marketData, placeOrder, loadLimitOrders, loadMarketOrders, limitOrders, marketOrders } = useTradingStore();
+  const {
+    selectedSymbol,
+    marketData,
+    placeOrder,
+    loadLimitOrders,
+    loadMarketOrders,
+    limitOrders,
+    marketOrders,
+  } = useTradingStore();
 
   useEffect(() => {
     const loadOrders = async () => {
       await loadLimitOrders();
       await loadMarketOrders();
     };
-    
+
     if (selectedSymbol) {
       loadOrders();
     }
@@ -110,7 +118,7 @@ export function TradePanel({
     setAmount(value);
 
     const amountNum = Number.parseFloat(value || "0");
-    
+
     if (orderType === "limit") {
       if (side === "buy") {
         const priceValue = Number.parseFloat(price || "1");
@@ -145,7 +153,7 @@ export function TradePanel({
 
     const totalNum = Number.parseFloat(value || "0");
     const priceNum = Number.parseFloat(price || "0");
-    
+
     if (priceNum > 0 && totalNum > 0) {
       const calculatedAmount = totalNum / priceNum;
       setAmount(calculatedAmount.toFixed(6));
@@ -162,7 +170,7 @@ export function TradePanel({
     setAmount("");
     setTotal("");
     setSliderValue(0);
-    
+
     if (orderType === "limit" && marketData && (!price || price === "0")) {
       setPrice(marketData.lastPrice);
     }
@@ -183,7 +191,8 @@ export function TradePanel({
 
       if (orderType === "limit") {
         if (side === "buy") {
-          const requiredQuote = Number.parseFloat(price) * Number.parseFloat(amount);
+          const requiredQuote =
+            Number.parseFloat(price) * Number.parseFloat(amount);
           if (requiredQuote > quoteBalance) {
             toast.error(`Insufficient ${quoteCurrency} balance`);
             return;
@@ -241,7 +250,7 @@ export function TradePanel({
 
   const getAvailableBalance = () => {
     if (orderType === "market") {
-      return side === "buy" 
+      return side === "buy"
         ? `${quoteBalance.toFixed(2)} ${quoteCurrency}`
         : `${baseBalance.toFixed(8)} ${baseCurrency}`;
     } else {
@@ -253,7 +262,8 @@ export function TradePanel({
 
   const isOrderValid = () => {
     if (!amount || Number.parseFloat(amount) <= 0) return false;
-    if (orderType === "limit" && (!price || Number.parseFloat(price) <= 0)) return false;
+    if (orderType === "limit" && (!price || Number.parseFloat(price) <= 0))
+      return false;
     return true;
   };
 
@@ -466,16 +476,28 @@ export function TradePanel({
                   Market ({marketOrders.length})
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="limit" className="space-y-1 max-h-32 overflow-y-auto">
+              <TabsContent
+                value="limit"
+                className="space-y-1 max-h-32 overflow-y-auto"
+              >
                 {limitOrders.length === 0 ? (
                   <div className="text-xs text-muted-foreground text-center py-2">
                     No limit orders
                   </div>
                 ) : (
                   limitOrders.slice(0, 5).map((order) => (
-                    <div key={order.id} className="flex justify-between items-center text-xs p-2 bg-muted rounded">
+                    <div
+                      key={order.id}
+                      className="flex justify-between items-center text-xs p-2 bg-muted rounded"
+                    >
                       <div className="flex flex-col">
-                        <span className={order.side === "BUY" ? "text-green-600" : "text-red-600"}>
+                        <span
+                          className={
+                            order.side === "BUY"
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }
+                        >
                           {order.side} {order.quantity}
                         </span>
                         <span className="text-muted-foreground">
@@ -483,12 +505,17 @@ export function TradePanel({
                         </span>
                       </div>
                       <div className="text-right">
-                        <div className={`text-xs px-1 py-0.5 rounded ${
-                          order.status === "FILLED" ? "bg-green-100 text-green-800" :
-                          order.status === "OPEN" ? "bg-blue-100 text-blue-800" :
-                          order.status === "CANCELLED" ? "bg-red-100 text-red-800" :
-                          "bg-gray-100 text-gray-800"
-                        }`}>
+                        <div
+                          className={`text-xs px-1 py-0.5 rounded ${
+                            order.status === "FILLED"
+                              ? "bg-green-100 text-green-800"
+                              : order.status === "OPEN"
+                              ? "bg-blue-100 text-blue-800"
+                              : order.status === "CANCELLED"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
                           {order.status}
                         </div>
                       </div>
@@ -496,16 +523,28 @@ export function TradePanel({
                   ))
                 )}
               </TabsContent>
-              <TabsContent value="market" className="space-y-1 max-h-32 overflow-y-auto">
+              <TabsContent
+                value="market"
+                className="space-y-1 max-h-32 overflow-y-auto"
+              >
                 {marketOrders.length === 0 ? (
                   <div className="text-xs text-muted-foreground text-center py-2">
                     No market orders
                   </div>
                 ) : (
                   marketOrders.slice(0, 5).map((order) => (
-                    <div key={order.id} className="flex justify-between items-center text-xs p-2 bg-muted rounded">
+                    <div
+                      key={order.id}
+                      className="flex justify-between items-center text-xs p-2 bg-muted rounded"
+                    >
                       <div className="flex flex-col">
-                        <span className={order.side === "BUY" ? "text-green-600" : "text-red-600"}>
+                        <span
+                          className={
+                            order.side === "BUY"
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }
+                        >
                           {order.side} {order.quantity}
                         </span>
                         <span className="text-muted-foreground">
@@ -513,12 +552,17 @@ export function TradePanel({
                         </span>
                       </div>
                       <div className="text-right">
-                        <div className={`text-xs px-1 py-0.5 rounded ${
-                          order.status === "FILLED" ? "bg-green-100 text-green-800" :
-                          order.status === "OPEN" ? "bg-blue-100 text-blue-800" :
-                          order.status === "CANCELLED" ? "bg-red-100 text-red-800" :
-                          "bg-gray-100 text-gray-800"
-                        }`}>
+                        <div
+                          className={`text-xs px-1 py-0.5 rounded ${
+                            order.status === "FILLED"
+                              ? "bg-green-100 text-green-800"
+                              : order.status === "OPEN"
+                              ? "bg-blue-100 text-blue-800"
+                              : order.status === "CANCELLED"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
                           {order.status}
                         </div>
                       </div>
