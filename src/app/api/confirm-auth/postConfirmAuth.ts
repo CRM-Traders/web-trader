@@ -3,8 +3,8 @@
 import { cookies } from "next/headers";
 
 interface AuthResponse {
-  access_token: string;
-  refresh_token?: string;
+  accessToken: string;
+  refreshToken?: string;
   expires_in?: number;
   user?: {
     id: string;
@@ -27,18 +27,16 @@ export const postConfirmAuth = async (ctx: string): Promise<boolean> => {
       }
     );
 
-    console.log("Auth response status:", response.status);
 
     if (response.status === 200) {
       const data: AuthResponse = await response.json();
-      console.log("Auth response data:", data);
 
-      if (data.access_token) {
+      if (data.accessToken) {
         // Get cookies instance
         const cookieStore = await cookies();
 
         // Set access token cookie
-        cookieStore.set("access_token", data.access_token, {
+        cookieStore.set("access_token", data.accessToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
@@ -47,8 +45,8 @@ export const postConfirmAuth = async (ctx: string): Promise<boolean> => {
         });
 
         // Set refresh token if provided
-        if (data.refresh_token) {
-          cookieStore.set("refresh_token", data.refresh_token, {
+        if (data.refreshToken) {
+          cookieStore.set("refresh_token", data.refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
             sameSite: "strict",
@@ -146,9 +144,9 @@ export const refreshAccessToken = async (): Promise<boolean> => {
     if (response.status === 200) {
       const data: AuthResponse = await response.json();
 
-      if (data.access_token) {
+      if (data.accessToken) {
         // Update access token
-        cookieStore.set("access_token", data.access_token, {
+        cookieStore.set("access_token", data.accessToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
@@ -157,8 +155,8 @@ export const refreshAccessToken = async (): Promise<boolean> => {
         });
 
         // Update refresh token if provided
-        if (data.refresh_token) {
-          cookieStore.set("refresh_token", data.refresh_token, {
+        if (data.refreshToken) {
+          cookieStore.set("refresh_token", data.refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
             sameSite: "strict",

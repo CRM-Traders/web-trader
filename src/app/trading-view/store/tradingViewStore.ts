@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useState, useEffect } from "react";
+import { fetchWalletBalances, placeLimitOrder, placeMarketOrder, fetchOrders, fetchLimitOrders, fetchMarketOrders } from "@/app/api/trading-accounts/actions";
 
 // Types
 export interface MarketData {
@@ -16,10 +17,13 @@ export interface MarketData {
 
 // Add these interfaces after the existing ones
 export interface WalletBalance {
+  id: string;
   currency: string;
   availableBalance: number;
   totalBalance: number;
   lockedBalance: number;
+  usdEquivalent: number;
+  lastPriceUpdate: string;
 }
 
 export interface TradingAccount {
@@ -55,6 +59,8 @@ interface TradingState {
   openOrders: Order[];
   orderHistory: Order[];
   tradeHistory: Order[];
+  limitOrders: Order[];
+  marketOrders: Order[];
 
   // Chart settings
   chartTimeframe: string;
@@ -73,6 +79,8 @@ interface TradingState {
   setOpenOrders: (orders: Order[]) => void;
   setOrderHistory: (orders: Order[]) => void;
   setTradeHistory: (orders: Order[]) => void;
+  setLimitOrders: (orders: Order[]) => void;
+  setMarketOrders: (orders: Order[]) => void;
   setChartTimeframe: (timeframe: string) => void;
   setChartType: (type: "candles" | "line" | "bars" | "area") => void;
   setChartIndicators: (indicators: string[]) => void;
@@ -82,6 +90,8 @@ interface TradingState {
     balance: Partial<WalletBalance>
   ) => void;
   loadOrders: () => Promise<void>;
+  loadLimitOrders: () => Promise<void>;
+  loadMarketOrders: () => Promise<void>;
   loadWalletBalances: () => Promise<void>;
   placeOrder: (orderData: {
     symbol: string;
@@ -91,6 +101,11 @@ interface TradingState {
     quantity: number;
   }) => Promise<boolean>;
 }
+
+// Helper function to convert side to number
+const sideToNumber = (side: "BUY" | "SELL"): number => {
+  return side === "BUY" ? 1 : -1;
+};
 
 // Create store with persistence
 export const useTradingStore = create<TradingState>()(
@@ -105,6 +120,8 @@ export const useTradingStore = create<TradingState>()(
       openOrders: [],
       orderHistory: [],
       tradeHistory: [],
+      limitOrders: [],
+      marketOrders: [],
       chartTimeframe: "1D",
       chartType: "candles",
       chartIndicators: [],
@@ -119,6 +136,8 @@ export const useTradingStore = create<TradingState>()(
       setOpenOrders: (orders) => set({ openOrders: orders }),
       setOrderHistory: (orders) => set({ orderHistory: orders }),
       setTradeHistory: (orders) => set({ tradeHistory: orders }),
+      setLimitOrders: (orders) => set({ limitOrders: orders }),
+      setMarketOrders: (orders) => set({ marketOrders: orders }),
       setChartTimeframe: (timeframe) => set({ chartTimeframe: timeframe }),
       setChartType: (type) => set({ chartType: type }),
       setChartIndicators: (indicators) => set({ chartIndicators: indicators }),
@@ -137,30 +156,117 @@ export const useTradingStore = create<TradingState>()(
           const { selectedAccount, selectedSymbol } = get();
           if (!selectedAccount?.id) return;
 
-          // This is a placeholder - replace with your actual API call
-          // const ordersResponse = await tradingService.getOrders(selectedAccount.id, selectedSymbol);
-
-          // Simulate API response for demo
-          const mockOpenOrders: Order[] = [
-            {
-              id: "1",
-              symbol: selectedSymbol,
-              side: "BUY",
-              type: "LIMIT",
-              price: 30000,
-              quantity: 0.1,
-              status: "OPEN",
-              createdAt: new Date().toISOString(),
-            },
-          ];
-
-          set({
-            openOrders: mockOpenOrders,
-            orderHistory: [],
-            tradeHistory: [],
+          // Fetch all orders for the selected account
+          const ordersResponse = await fetchOrders({
+            tradingAccountId: selectedAccount.id,
+            symbol: selectedSymbol,
+            pageIndex: 1,
+            pageSize: 100
           });
+
+          if (ordersResponse.success && ordersResponse.data) {
+            // Convert the orders to match our interface
+            const orders: Order[] = ordersResponse.data.map(order => ({
+              id: order.id,
+              symbol: order.symbol,
+              side: order.side === 1 ? "BUY" : "SELL",
+              type: order.type as "LIMIT" | "MARKET",
+              price: order.price,
+              quantity: order.quantity,
+              status: order.status,
+              createdAt: order.createdAt,
+            }));
+
+            // Separate open orders from completed orders
+            const openOrders = orders.filter(order => 
+              order.status === "OPEN" || order.status === "PENDING" || order.status === "PARTIALLY_FILLED"
+            );
+            const completedOrders = orders.filter(order => 
+              order.status === "FILLED" || order.status === "CANCELLED" || order.status === "REJECTED"
+            );
+
+            set({
+              openOrders,
+              orderHistory: completedOrders,
+              tradeHistory: completedOrders.filter(order => order.status === "FILLED"),
+            });
+          } else {
+            console.error("Failed to load orders:", ordersResponse.error);
+          }
         } catch (error) {
           console.error("Failed to load orders:", error);
+        }
+      },
+
+      // Load limit orders from API
+      loadLimitOrders: async () => {
+        try {
+          const { selectedAccount, selectedSymbol } = get();
+          if (!selectedAccount?.id) return;
+
+          // Fetch limit orders for the selected account
+          const ordersResponse = await fetchLimitOrders({
+            tradingAccountId: selectedAccount.id,
+            symbol: selectedSymbol,
+            pageIndex: 1,
+            pageSize: 100
+          });
+
+          if (ordersResponse.success && ordersResponse.data) {
+            // Convert the orders to match our interface
+            const orders: Order[] = ordersResponse.data.map(order => ({
+              id: order.id,
+              symbol: order.symbol,
+              side: order.side === 1 ? "BUY" : "SELL",
+              type: order.type as "LIMIT" | "MARKET",
+              price: order.price,
+              quantity: order.quantity,
+              status: order.status,
+              createdAt: order.createdAt,
+            }));
+
+            set({ limitOrders: orders });
+          } else {
+            console.error("Failed to load limit orders:", ordersResponse.error);
+          }
+        } catch (error) {
+          console.error("Failed to load limit orders:", error);
+        }
+      },
+
+      // Load market orders from API
+      loadMarketOrders: async () => {
+        try {
+          const { selectedAccount, selectedSymbol } = get();
+          if (!selectedAccount?.id) return;
+
+          // Fetch market orders for the selected account
+          const ordersResponse = await fetchMarketOrders({
+            tradingAccountId: selectedAccount.id,
+            symbol: selectedSymbol,
+            pageIndex: 1,
+            pageSize: 100
+          });
+
+          if (ordersResponse.success && ordersResponse.data) {
+            // Convert the orders to match our interface
+            const orders: Order[] = ordersResponse.data.map(order => ({
+              id: order.id,
+              symbol: order.symbol,
+              side: order.side === 1 ? "BUY" : "SELL",
+              type: order.type as "LIMIT" | "MARKET",
+              price: order.price,
+              quantity: order.quantity,
+              status: order.status,
+              createdAt: order.createdAt,
+            }));
+
+            set({ marketOrders: orders });
+          } else {
+            console.error("Failed to load market orders:", ordersResponse.error);
+          }
+        } catch (error) {
+          console.error("Failed to load market orders:", error);
         }
       },
 
@@ -169,35 +275,14 @@ export const useTradingStore = create<TradingState>()(
           const { selectedAccount } = get();
           if (!selectedAccount?.id) return;
 
-          // Mock wallet data - replace with your actual API call
-          const mockWallets: WalletBalance[] = [
-            {
-              currency: "BTC",
-              availableBalance: 1.5,
-              totalBalance: 1.5,
-              lockedBalance: 0,
-            },
-            {
-              currency: "USDT",
-              availableBalance: 10000,
-              totalBalance: 10000,
-              lockedBalance: 0,
-            },
-            {
-              currency: "ETH",
-              availableBalance: 5.2,
-              totalBalance: 5.2,
-              lockedBalance: 0,
-            },
-            {
-              currency: "SOL",
-              availableBalance: 100,
-              totalBalance: 100,
-              lockedBalance: 0,
-            },
-          ];
-
-          set({ walletBalances: mockWallets });
+          // Call the API to fetch wallet balances
+          const response = await fetchWalletBalances(selectedAccount.id);
+          
+          if (response.success && response.data) {
+            set({ walletBalances: response.data });
+          } else {
+            console.error("Failed to load wallet balances:", response.error);
+          }
         } catch (error) {
           console.error("Failed to load wallet balances:", error);
         }
@@ -211,22 +296,25 @@ export const useTradingStore = create<TradingState>()(
             setWalletBalances,
             setOpenOrders,
             openOrders,
+            loadWalletBalances,
           } = get();
-          if (!selectedAccount?.id) return false;
+          
+          if (!selectedAccount?.id) {
+            throw new Error("No trading account selected");
+          }
 
           const [baseCurrency, quoteCurrency] = orderData.symbol.split("/");
 
-          // Calculate order total
-          const orderPrice =
-            orderData.type === "MARKET" ? 50000 : orderData.price || 0; // Mock market price
-          const orderTotal = orderPrice * orderData.quantity;
-
-          // Check balance
+          // Pre-flight balance check
           if (orderData.side === "BUY") {
             const quoteWallet = walletBalances.find(
               (w) => w.currency === quoteCurrency
             );
-            if (!quoteWallet || quoteWallet.availableBalance < orderTotal) {
+            const estimatedTotal = orderData.price 
+              ? orderData.price * orderData.quantity 
+              : orderData.quantity; // For market orders, quantity might be in quote currency
+            
+            if (!quoteWallet || quoteWallet.availableBalance < estimatedTotal) {
               throw new Error(`Insufficient ${quoteCurrency} balance`);
             }
           } else {
@@ -241,42 +329,53 @@ export const useTradingStore = create<TradingState>()(
             }
           }
 
-          // Create new order
+          // Prepare API request data
+          const apiData = {
+            tradingAccountId: selectedAccount.id,
+            symbol: orderData.symbol,
+            side: sideToNumber(orderData.side),
+            quantity: orderData.quantity,
+            ...(orderData.type === "LIMIT" && { price: orderData.price })
+          };
+
+          let response;
+          
+          // Call the appropriate API function
+          if (orderData.type === "LIMIT") {
+            response = await placeLimitOrder(apiData as any);
+          } else {
+            response = await placeMarketOrder({
+              tradingAccountId: apiData.tradingAccountId,
+              symbol: apiData.symbol,
+              side: apiData.side,
+              quantity: apiData.quantity
+            });
+          }
+
+          if (!response.success) {
+            throw new Error(response.error || "Failed to place order");
+          }
+
+          // Create new order object for local state
           const newOrder: Order = {
-            id: `order_${Date.now()}`,
+            id: response.data?.id || `order_${Date.now()}`,
             symbol: orderData.symbol,
             side: orderData.side,
             type: orderData.type,
-            price: orderPrice,
+            price: orderData.price,
             quantity: orderData.quantity,
-            status: "OPEN",
-            createdAt: new Date().toISOString(),
+            status: response.data?.status || "OPEN",
+            createdAt: response.data?.createdAt || new Date().toISOString(),
           };
 
-          // Update balances (lock funds)
-          const updatedBalances = walletBalances.map((wallet) => {
-            if (orderData.side === "BUY" && wallet.currency === quoteCurrency) {
-              return {
-                ...wallet,
-                availableBalance: wallet.availableBalance - orderTotal,
-                lockedBalance: wallet.lockedBalance + orderTotal,
-              };
-            } else if (
-              orderData.side === "SELL" &&
-              wallet.currency === baseCurrency
-            ) {
-              return {
-                ...wallet,
-                availableBalance: wallet.availableBalance - orderData.quantity,
-                lockedBalance: wallet.lockedBalance + orderData.quantity,
-              };
-            }
-            return wallet;
-          });
-
-          // Update state
-          setWalletBalances(updatedBalances);
+          // Update local state
           setOpenOrders([...openOrders, newOrder]);
+
+          // Reload wallet balances to get updated amounts
+          await loadWalletBalances();
+
+          // Reload orders to get the latest order status
+          await get().loadOrders();
 
           return true;
         } catch (error) {

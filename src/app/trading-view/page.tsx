@@ -14,6 +14,7 @@ import {
   Loader,
   LogOut,
   User,
+  ArrowLeftRight,
 } from "lucide-react";
 import { useTradingWebSocket } from "./hooks/useTradingWebSocket";
 import { useHasHydrated, useTradingStore } from "./store/tradingViewStore";
@@ -28,6 +29,9 @@ import { WalletBalance } from "./components/WalletBalance/WalletBalance";
 import { ChartSettingsPanel } from "./components/ChartSettingsPanel/ChartSettingsPanel";
 import { getUserInfo, isAuthenticated, logout } from "../api/confirm-auth/auth";
 import { postConfirmAuth } from "../api/confirm-auth/postConfirmAuth";
+import { TradingAccountModal } from "./components/TradingAccounts/TradingAccount";
+import { AccountSwitcher } from "./components/AccountSwitcher/AccountSwitcher";
+import { fetchTradingAccounts } from "../api/trading-accounts/actions";
 
 // Authentication loading component
 function AuthenticationLoader() {
@@ -133,10 +137,16 @@ export default function SpotTradingPage() {
     name: string;
   } | null>(null);
 
+  // Account selection state
+  const [showAccountSelection, setShowAccountSelection] = useState(false);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
+
   const {
     selectedSymbol,
     marketData,
     selectedAccount,
+    setSelectedAccount,
+    setAccounts,
     loadOrders,
     loadWalletBalances,
     walletBalances,
@@ -151,7 +161,7 @@ export default function SpotTradingPage() {
   useEffect(() => {
     const handleAuth = async () => {
       const ctx = searchParams.get("ctx");
-
+      console.log("Authentication context:", ctx);
       // Check if already authenticated (from cookies)
       if (!ctx && isAuthenticated()) {
         setAuthStatus("authenticated");
@@ -196,12 +206,49 @@ export default function SpotTradingPage() {
     handleAuth();
   }, [searchParams, router]);
 
-  // Load trading data after authentication
+  // Load trading accounts after authentication
   useEffect(() => {
-    if (authStatus === "authenticated" && hasHydrated && selectedAccount?.id) {
+    if (authStatus === "authenticated" && hasHydrated && !accountsLoaded) {
+      loadTradingAccounts();
+    }
+  }, [authStatus, hasHydrated, accountsLoaded]);
+
+  // Show account selection if no account is selected and accounts are loaded
+  useEffect(() => {
+    if (accountsLoaded && !selectedAccount && !showAccountSelection) {
+      setShowAccountSelection(true);
+    }
+  }, [accountsLoaded, selectedAccount, showAccountSelection]);
+
+  // Load trading data when account is selected
+  useEffect(() => {
+    if (authStatus === "authenticated" && hasHydrated && selectedAccount?.id && !showAccountSelection) {
       loadPageData();
     }
-  }, [authStatus, hasHydrated, selectedAccount?.id, selectedSymbol]);
+  }, [authStatus, hasHydrated, selectedAccount?.id, selectedSymbol, showAccountSelection]);
+
+  const loadTradingAccounts = async () => {
+    try {
+      const result = await fetchTradingAccounts();
+      console.log("Trading accounts result:", result);
+      if (result.success && result.data) {
+        const transformedAccounts = result.data.map(account => ({
+          id: account.id,
+          name: account.displayName,
+          wallets: [], // Ensure wallets is always an array
+        }));
+        setAccounts(transformedAccounts);
+        setAccountsLoaded(true);
+        
+        // Don't automatically select any account - let the user choose
+        // This prevents automatic selection
+      }
+    } catch (error) {
+      console.error("Failed to load trading accounts:", error);
+      toast.error("Failed to load trading accounts");
+      setAccountsLoaded(true);
+    }
+  };
 
   const loadPageData = async () => {
     if (!selectedAccount?.id) return;
@@ -231,6 +278,14 @@ export default function SpotTradingPage() {
     }
   };
 
+  const handleAccountSelected = () => {
+    setShowAccountSelection(false);
+  };
+
+  const handleSwitchAccount = () => {
+    setShowAccountSelection(true);
+  };
+
   // Show authentication loader
   if (authStatus === "loading") {
     return <AuthenticationLoader />;
@@ -253,29 +308,40 @@ export default function SpotTradingPage() {
     );
   }
 
-  // Show no account message
-  if (!selectedAccount) {
+  // Show account selection modal
+  if (showAccountSelection || (!selectedAccount && accountsLoaded)) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] space-y-4">
-        <Wallet className="h-16 w-16 text-muted-foreground" />
-        <h2 className="text-2xl font-semibold">No Trading Account</h2>
-        <p className="text-muted-foreground">
-          Please create a trading account to start trading
-        </p>
-        <Button onClick={() => (window.location.href = "/dashboard")}>
-          Go to Dashboard
-        </Button>
-      </div>
+      <TradingAccountModal 
+        allowSkip={!!selectedAccount}
+        onAccountSelected={handleAccountSelected}
+      />
     );
   }
 
   // Show loading for trading data
-  if (isLoading) {
+  if (isLoading && !selectedAccount) {
     return (
       <div className="flex h-[calc(100vh-200px)] items-center justify-center">
         <div className="text-center space-y-4">
           <Loader className="w-8 h-8 animate-spin text-blue-400 mx-auto" />
           <p className="text-muted-foreground">Loading trading data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't show trading interface if no account is selected
+  if (!selectedAccount) {
+    return (
+      <div className="flex h-[calc(100vh-200px)] items-center justify-center">
+        <div className="text-center space-y-4">
+          <Wallet className="w-16 h-16 text-muted-foreground mx-auto" />
+          <h2 className="text-2xl font-semibold">No Trading Account Selected</h2>
+          <p className="text-muted-foreground">Please select a trading account to continue</p>
+          <Button onClick={handleSwitchAccount}>
+            <Wallet className="h-4 w-4 mr-2" />
+            Select Account
+          </Button>
         </div>
       </div>
     );
@@ -287,17 +353,31 @@ export default function SpotTradingPage() {
   const quoteWallet = walletBalances.find((w) => w.currency === quoteCurrency);
 
   return (
-    <div className="h-[calc(100vh-120px)] flex flex-col">
+    <div className="h-[calc(100vh-120px)] flex flex-col p-4">
       {/* Market Header */}
       <div className="flex items-center justify-between mb-4">
         <MarketSelector />
         <div className="flex items-center gap-4">
           <MarketStats symbol={selectedSymbol} />
+          
+          {/* Account Info with Switch Button */}
+          <div className="flex items-center gap-2 px-3 py-1 bg-muted rounded-lg">
+            <Wallet className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">{selectedAccount.name}</span>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleSwitchAccount}
+              className="h-6 w-6 p-0"
+            >
+              <ArrowLeftRight className="h-3 w-3" />
+            </Button>
+          </div>
+          
           <div className="flex items-center gap-2 text-xs">
             <div
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? "bg-green-500" : "bg-red-500"
-              }`}
+              className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"
+                }`}
             />
             <span className="text-muted-foreground">
               {isConnected ? "Live" : "Disconnected"}
@@ -337,7 +417,7 @@ export default function SpotTradingPage() {
           </Card>
 
           {/* Orders */}
-          <Card className="h-[300px]">
+          <Card className="h-[calc(100%-32.2rem)]">
             <Tabs defaultValue="openOrders" className="h-full">
               <TabsList className="w-full justify-start">
                 <TabsTrigger value="openOrders">Open Orders</TabsTrigger>
@@ -369,13 +449,24 @@ export default function SpotTradingPage() {
         {/* Right Column - Analysis, Order Book & Trade Panel */}
         <div className="col-span-12 lg:col-span-4 space-y-4">
           {/* Chart Analysis Panel */}
-          <div className="h-[250px]">
-            <ChartAnalysisPanel
-              symbol={selectedSymbol}
-              data={[]}
-              marketData={marketData}
+          <ChartAnalysisPanel
+            symbol={selectedSymbol}
+            data={[]}
+            marketData={marketData}
+          />
+
+          <WalletBalance />
+
+          {/* Trade Panel */}
+          <Card className="min-h-[350px]">
+            <TradePanel
+              baseBalance={baseWallet?.availableBalance || 0}
+              quoteBalance={quoteWallet?.availableBalance || 0}
+              baseCurrency={baseCurrency}
+              quoteCurrency={quoteCurrency}
+              onOrderPlaced={loadPageData}
             />
-          </div>
+          </Card>
 
           {/* Order Book */}
           <Card className="h-[300px]">
@@ -389,18 +480,6 @@ export default function SpotTradingPage() {
               </div>
             )}
           </Card>
-
-          {/* Trade Panel */}
-          <Card className="h-[350px]">
-            <TradePanel
-              baseBalance={baseWallet?.availableBalance || 0}
-              quoteBalance={quoteWallet?.availableBalance || 0}
-              baseCurrency={baseCurrency}
-              quoteCurrency={quoteCurrency}
-              onOrderPlaced={loadPageData}
-            />
-          </Card>
-          <WalletBalance />
         </div>
       </div>
 
