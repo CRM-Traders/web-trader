@@ -1,52 +1,54 @@
 name: Deploy Next.js Application
-
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 env:
   APP_NAME: 'web-trader'
   NODE_VERSION: '20.x'
   PORT: '4799'
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+        
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm' 
+          node-version: ${{ env.NODE_VERSION }} 
           
       - name: Install pnpm
         run: |
           corepack enable
           corepack prepare pnpm@latest --activate
-          pnpm --version  # ← confirm it's available here
-
+          pnpm --version
+          
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+            
       - name: Install Dependencies & Build
         run: |
           pnpm install --frozen-lockfile
           pnpm run build
-
           # Set deploy path
           APP_NAME_LOWER=$(echo "${{ env.APP_NAME }}" | tr '[:upper:]' '[:lower:]')
           DEPLOY_PATH="/www/wwwroot/${APP_NAME_LOWER}.crm-system.com"
           echo "DEPLOY_PATH=${DEPLOY_PATH}" >> $GITHUB_ENV
-
+          
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-
+          
       - name: Deploy via Rsync & Post Setup
         run: |
           # Sync files to server
@@ -60,31 +62,25 @@ jobs:
             --exclude='.htaccess' \
             --exclude='.github' \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ env.DEPLOY_PATH }}/
-
           # Run post-deploy setup on server
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
             set -e
-
             cd ${{ env.DEPLOY_PATH }}
-
             # Install production deps
             pnpm install --prod
-
             # File permissions
             sudo find . -type f -exec chmod 644 {} \;
             sudo find . -type d -exec chmod 755 {} \;
             sudo chown -R www:www .
-
             # Create startup script
             cat > start-app.sh << 'INNER_EOF'
             #!/bin/bash
-            cd $(dirname \$0)
+            cd \$(dirname \$0)
             exec npx next start -p ${{ env.PORT }}
             INNER_EOF
-
             chmod +x start-app.sh
             EOF
-
+            
       - name: Cleanup SSH
         if: always()
         run: rm -rf ~/.ssh
