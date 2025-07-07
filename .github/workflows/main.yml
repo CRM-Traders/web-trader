@@ -20,12 +20,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'pnpm'
           
       - name: Build Application
         run: |
-          npm ci
-          npm run build
+          pnpm ci
+          pnpm run build
           
           APP_NAME_LOWER=$(echo ${{ env.APP_NAME }} | tr '[:upper:]' '[:lower:]')
           DEPLOY_PATH="/www/wwwroot/${APP_NAME_LOWER}.crm-system.com"
@@ -57,7 +57,7 @@ jobs:
             cd ${{ env.DEPLOY_PATH }}
             
             # Install production dependencies
-            npm ci --production
+            pnpm ci --production
             
             # Set appropriate file permissions
             find '${{ env.DEPLOY_PATH }}' -name '.user.ini' -prune -o -type f -exec sudo chown www:www {} + 2>/dev/null || true
