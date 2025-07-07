@@ -1,46 +1,52 @@
 name: Deploy Next.js Application
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 env:
-  APP_NAME: 'web-trader' 
+  APP_NAME: 'web-trader'
   NODE_VERSION: '20.x'
   PORT: '4799'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          
-      - name: Build Application
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install Dependencies & Build
         run: |
-          pnpm ci
+          pnpm install --frozen-lockfile
           pnpm run build
-          
-          APP_NAME_LOWER=$(echo ${{ env.APP_NAME }} | tr '[:upper:]' '[:lower:]')
+
+          # Set deploy path
+          APP_NAME_LOWER=$(echo "${{ env.APP_NAME }}" | tr '[:upper:]' '[:lower:]')
           DEPLOY_PATH="/www/wwwroot/${APP_NAME_LOWER}.crm-system.com"
           echo "DEPLOY_PATH=${DEPLOY_PATH}" >> $GITHUB_ENV
-          
+
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-          
-      - name: Deploy Application
+
+      - name: Deploy via Rsync & Post Setup
         run: |
-          # Deploy complete application directory
+          # Sync files to server
           rsync -avz --delete \
             --exclude='.git' \
             --exclude='node_modules' \
@@ -51,29 +57,31 @@ jobs:
             --exclude='.htaccess' \
             --exclude='.github' \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ env.DEPLOY_PATH }}/
-          
-          # Execute post-deployment tasks on server
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+
+          # Run post-deploy setup on server
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
+            set -e
+
             cd ${{ env.DEPLOY_PATH }}
-            
-            # Install production dependencies
-            pnpm ci --production
-            
-            # Set appropriate file permissions
-            find '${{ env.DEPLOY_PATH }}' -name '.user.ini' -prune -o -type f -exec sudo chown www:www {} + 2>/dev/null || true
-            find '${{ env.DEPLOY_PATH }}' -name '.user.ini' -prune -o -type d -exec sudo chown www:www {} + 2>/dev/null || true
-            find '${{ env.DEPLOY_PATH }}' -name '.user.ini' -prune -o -type f -exec sudo chmod 644 {} + 2>/dev/null || true
-            find '${{ env.DEPLOY_PATH }}' -name '.user.ini' -prune -o -type d -exec sudo chmod 755 {} + 2>/dev/null || true
-            
-            # Create startup script for the daemon
-            cat > start-app.sh << 'EOF'
+
+            # Install production deps
+            pnpm install --prod
+
+            # File permissions
+            sudo find . -type f -exec chmod 644 {} \;
+            sudo find . -type d -exec chmod 755 {} \;
+            sudo chown -R www:www .
+
+            # Create startup script
+            cat > start-app.sh << 'INNER_EOF'
             #!/bin/bash
             cd $(dirname \$0)
-              exec npx next start -p ${{ env.PORT }}
-            EOF
+            exec npx next start -p ${{ env.PORT }}
+            INNER_EOF
+
             chmod +x start-app.sh
-          "
-          
-      - name: Cleanup
+            EOF
+
+      - name: Cleanup SSH
         if: always()
         run: rm -rf ~/.ssh
