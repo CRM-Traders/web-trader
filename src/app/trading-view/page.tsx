@@ -32,6 +32,7 @@ import { postConfirmAuth } from "../api/confirm-auth/postConfirmAuth";
 import { TradingAccountModal } from "./components/TradingAccounts/TradingAccount";
 import { AccountSwitcher } from "./components/AccountSwitcher/AccountSwitcher";
 import { fetchTradingAccounts } from "../api/trading-accounts/actions";
+import Error from "next/error";
 
 // Authentication loading component
 function AuthenticationLoader() {
@@ -213,6 +214,25 @@ function SpotTradingContent() {
         setAuthStatus("error");
         setAuthError("Network error during authentication");
         toast.error("Network error during authentication");
+        console.error("Auth check failed:", error);
+        if (error && typeof error === "object" && "message" in error) {
+          console.error("Error details:", {
+            message: (error as { message?: string }).message,
+            stack: (error as { stack?: string }).stack,
+            name: (error as { name?: string }).name,
+          });
+          setAuthStatus("error");
+          setAuthError(
+            `Network error: ${(error as { message?: string }).message}`
+          );
+          toast.error(
+            `Network error: ${(error as { message?: string }).message}`
+          );
+        } else {
+          setAuthStatus("error");
+          setAuthError("Network error during authentication");
+          toast.error("Network error during authentication");
+        }
       }
     };
 
