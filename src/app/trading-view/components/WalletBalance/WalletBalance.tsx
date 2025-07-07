@@ -36,9 +36,9 @@ export function WalletBalance() {
       wallet.currency === baseCurrency || wallet.currency === quoteCurrency
   );
 
-  // Get balances with non-zero amounts
+  // Get balances with non-zero amounts or USD equivalent
   const nonZeroBalances = walletBalances.filter(
-    (wallet) => wallet.totalBalance > 0
+    (wallet) => wallet.totalBalance > 0 || wallet.usdEquivalent > 0
   );
 
   const displayBalances = showAllBalances
@@ -47,7 +47,7 @@ export function WalletBalance() {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <Wallet className="h-4 w-4" />
@@ -87,7 +87,7 @@ export function WalletBalance() {
           </div>
         ) : (
           displayBalances.map((wallet) => (
-            <div key={wallet.currency} className="space-y-2">
+            <div key={wallet.id} className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm">{wallet.currency}</span>
@@ -95,6 +95,11 @@ export function WalletBalance() {
                     wallet.currency === quoteCurrency) && (
                     <Badge variant="outline" className="text-xs h-4">
                       Trading
+                    </Badge>
+                  )}
+                  {wallet.usdEquivalent > 0 && (
+                    <Badge variant="secondary" className="text-xs h-4">
+                      ${wallet.usdEquivalent.toFixed(2)}
                     </Badge>
                   )}
                 </div>
@@ -131,6 +136,23 @@ export function WalletBalance() {
                 </div>
               )}
 
+              {/* USD Equivalent and Last Update */}
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  {wallet.usdEquivalent > 0 && (
+                    <span>≈ ${wallet.usdEquivalent.toFixed(2)} USD</span>
+                  )}
+                </div>
+                {wallet.lastPriceUpdate && (
+                  <span title={new Date(wallet.lastPriceUpdate).toLocaleString()}>
+                    Updated: {new Date(wallet.lastPriceUpdate).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                )}
+              </div>
+
               {displayBalances.indexOf(wallet) < displayBalances.length - 1 && (
                 <Separator />
               )}
@@ -138,8 +160,32 @@ export function WalletBalance() {
           ))
         )}
 
-        {showAllBalances && (
+        {!showAllBalances && nonZeroBalances.length > tradingPairBalances.length && (
           <div className="pt-2 border-t">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-muted-foreground">
+                Total Portfolio: ${nonZeroBalances.reduce((total, wallet) => total + wallet.usdEquivalent, 0).toFixed(2)} USD
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAllBalances(true)}
+                className="h-6 px-2 text-xs"
+              >
+                Show All ({nonZeroBalances.length})
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {showAllBalances && (
+          <div className="pt-2 border-t space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Total Portfolio Value:</span>
+              <span className="text-sm font-mono font-medium">
+                ${nonZeroBalances.reduce((total, wallet) => total + wallet.usdEquivalent, 0).toFixed(2)} USD
+              </span>
+            </div>
             <div className="text-xs text-muted-foreground text-center">
               Showing {nonZeroBalances.length} of {walletBalances.length}{" "}
               currencies

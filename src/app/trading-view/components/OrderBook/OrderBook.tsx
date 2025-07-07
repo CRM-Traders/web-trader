@@ -72,7 +72,7 @@ export function OrderBook({ symbol }: OrderBookProps) {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between pb-4 px-4 border-b">
         <h3 className="font-medium">Order Book</h3>
         <Tabs
           value={depth}
