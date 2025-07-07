@@ -24,8 +24,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm' 
           
-      - name: Enable pnpm via Corepack
-        run: corepack enable
+      - name: Install pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+          pnpm --version  # ← confirm it's available here
 
       - name: Install Dependencies & Build
         run: |
