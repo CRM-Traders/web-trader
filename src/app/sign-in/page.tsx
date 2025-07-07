@@ -41,7 +41,6 @@ const SignInPage = () => {
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Handle sign in logic here
-    console.log("Sign in:", { email, password, rememberMe });
     setIsLoading(false);
   };
 

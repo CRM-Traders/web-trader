@@ -57,10 +57,10 @@ export function OrderHistory({ type }: OrderHistoryProps) {
                   {order.side}
                 </span>
               </td>
-              <td className="p-2 text-right">{order.price.toFixed(2)}</td>
+              <td className="p-2 text-right">{order.price?.toFixed(2)}</td>
               <td className="p-2 text-right">{order.quantity.toFixed(6)}</td>
               <td className="p-2 text-right">
-                {(order.price * order.quantity).toFixed(2)}
+                {order.price && (order.price * order.quantity).toFixed(2)}
               </td>
               {type === "open" && (
                 <td className="p-2 text-right">

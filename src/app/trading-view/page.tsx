@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -124,7 +124,20 @@ function AuthenticationError({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-export default function SpotTradingPage() {
+// Loading fallback component
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="text-center space-y-4">
+        <Loader className="w-8 h-8 animate-spin text-blue-400 mx-auto" />
+        <p className="text-slate-400">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+// Main component that uses useSearchParams
+function SpotTradingContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [authStatus, setAuthStatus] = useState<
@@ -222,24 +235,35 @@ export default function SpotTradingPage() {
 
   // Load trading data when account is selected
   useEffect(() => {
-    if (authStatus === "authenticated" && hasHydrated && selectedAccount?.id && !showAccountSelection) {
+    if (
+      authStatus === "authenticated" &&
+      hasHydrated &&
+      selectedAccount?.id &&
+      !showAccountSelection
+    ) {
       loadPageData();
     }
-  }, [authStatus, hasHydrated, selectedAccount?.id, selectedSymbol, showAccountSelection]);
+  }, [
+    authStatus,
+    hasHydrated,
+    selectedAccount?.id,
+    selectedSymbol,
+    showAccountSelection,
+  ]);
 
   const loadTradingAccounts = async () => {
     try {
       const result = await fetchTradingAccounts();
       console.log("Trading accounts result:", result);
       if (result.success && result.data) {
-        const transformedAccounts = result.data.map(account => ({
+        const transformedAccounts = result.data.map((account) => ({
           id: account.id,
           name: account.displayName,
           wallets: [], // Ensure wallets is always an array
         }));
         setAccounts(transformedAccounts);
         setAccountsLoaded(true);
-        
+
         // Don't automatically select any account - let the user choose
         // This prevents automatic selection
       }
@@ -311,7 +335,7 @@ export default function SpotTradingPage() {
   // Show account selection modal
   if (showAccountSelection || (!selectedAccount && accountsLoaded)) {
     return (
-      <TradingAccountModal 
+      <TradingAccountModal
         allowSkip={!!selectedAccount}
         onAccountSelected={handleAccountSelected}
       />
@@ -336,8 +360,12 @@ export default function SpotTradingPage() {
       <div className="flex h-[calc(100vh-200px)] items-center justify-center">
         <div className="text-center space-y-4">
           <Wallet className="w-16 h-16 text-muted-foreground mx-auto" />
-          <h2 className="text-2xl font-semibold">No Trading Account Selected</h2>
-          <p className="text-muted-foreground">Please select a trading account to continue</p>
+          <h2 className="text-2xl font-semibold">
+            No Trading Account Selected
+          </h2>
+          <p className="text-muted-foreground">
+            Please select a trading account to continue
+          </p>
           <Button onClick={handleSwitchAccount}>
             <Wallet className="h-4 w-4 mr-2" />
             Select Account
@@ -359,25 +387,26 @@ export default function SpotTradingPage() {
         <MarketSelector />
         <div className="flex items-center gap-4">
           <MarketStats symbol={selectedSymbol} />
-          
+
           {/* Account Info with Switch Button */}
           <div className="flex items-center gap-2 px-3 py-1 bg-muted rounded-lg">
             <Wallet className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm font-medium">{selectedAccount.name}</span>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleSwitchAccount}
               className="h-6 w-6 p-0"
             >
               <ArrowLeftRight className="h-3 w-3" />
             </Button>
           </div>
-          
+
           <div className="flex items-center gap-2 text-xs">
             <div
-              className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"
-                }`}
+              className={`w-2 h-2 rounded-full ${
+                isConnected ? "bg-green-500" : "bg-red-500"
+              }`}
             />
             <span className="text-muted-foreground">
               {isConnected ? "Live" : "Disconnected"}
@@ -489,5 +518,14 @@ export default function SpotTradingPage() {
         onClose={() => setShowSettings(false)}
       />
     </div>
+  );
+}
+
+// Main export component with Suspense wrapper
+export default function SpotTradingPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <SpotTradingContent />
+    </Suspense>
   );
 }

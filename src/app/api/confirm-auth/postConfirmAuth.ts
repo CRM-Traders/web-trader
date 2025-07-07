@@ -27,7 +27,6 @@ export const postConfirmAuth = async (ctx: string): Promise<boolean> => {
       }
     );
 
-
     if (response.status === 200) {
       const data: AuthResponse = await response.json();
 
@@ -75,7 +74,6 @@ export const postConfirmAuth = async (ctx: string): Promise<boolean> => {
           path: "/",
         });
 
-        console.log("Cookies set successfully");
         return true;
       } else {
         console.error("No access token in response");
@@ -112,8 +110,6 @@ export const clearAuthCookies = async (): Promise<void> => {
     cookieStore.delete("refresh_token");
     cookieStore.delete("user_info");
     cookieStore.delete("auth_status");
-
-    console.log("Auth cookies cleared");
   } catch (error) {
     console.error("Error clearing auth cookies:", error);
   }
@@ -165,7 +161,6 @@ export const refreshAccessToken = async (): Promise<boolean> => {
           });
         }
 
-        console.log("Access token refreshed successfully");
         return true;
       }
     }

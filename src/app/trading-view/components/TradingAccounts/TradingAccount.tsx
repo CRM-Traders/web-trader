@@ -1,12 +1,22 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Wallet, Plus, Loader2, Check } from "lucide-react";
 import { useState, useEffect } from "react";
-import { fetchTradingAccounts, createTradingAccount, setTradingAccount } from "@/app/api/trading-accounts/actions";
+import {
+  fetchTradingAccounts,
+  createTradingAccount,
+  setTradingAccount,
+} from "@/app/api/trading-accounts/actions";
 import { useTradingStore } from "../../store/tradingViewStore";
 
 interface TradingAccount {
@@ -23,7 +33,10 @@ interface TradingAccountModalProps {
   onAccountSelected?: () => void; // Callback when account is selected
 }
 
-export function TradingAccountModal({ allowSkip = false, onAccountSelected }: TradingAccountModalProps) {
+export function TradingAccountModal({
+  allowSkip = false,
+  onAccountSelected,
+}: TradingAccountModalProps) {
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -31,7 +44,7 @@ export function TradingAccountModal({ allowSkip = false, onAccountSelected }: Tr
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  
+
   const { setSelectedAccount, selectedAccount } = useTradingStore();
 
   useEffect(() => {
@@ -42,9 +55,9 @@ export function TradingAccountModal({ allowSkip = false, onAccountSelected }: Tr
     try {
       setLoading(true);
       setError(null);
-      
+
       const result = await fetchTradingAccounts();
-      
+
       if (result.success) {
         setAccounts(result.data || []);
       } else {
@@ -68,7 +81,7 @@ export function TradingAccountModal({ allowSkip = false, onAccountSelected }: Tr
       setError(null);
 
       const result = await createTradingAccount({
-        displayName: newAccountName.trim()
+        displayName: newAccountName.trim(),
       });
 
       if (result.success) {
@@ -95,16 +108,15 @@ export function TradingAccountModal({ allowSkip = false, onAccountSelected }: Tr
       const result = await setTradingAccount(account.id);
 
       if (result.success) {
-        console.log("Trading account selected:", result);
         // Transform the account data to match the store's TradingAccount interface
         const tradingAccount = {
           id: account.id,
           name: account.displayName,
-          wallets: [] // This will be populated when wallet data is loaded
+          wallets: [], // This will be populated when wallet data is loaded
         };
-        
+
         setSelectedAccount(tradingAccount);
-        
+
         // Call the callback if provided
         if (onAccountSelected) {
           onAccountSelected();
@@ -136,9 +148,7 @@ export function TradingAccountModal({ allowSkip = false, onAccountSelected }: Tr
         <Wallet className="h-16 w-16 text-red-500" />
         <h2 className="text-2xl font-semibold text-red-600">Error</h2>
         <p className="text-muted-foreground text-center">{error}</p>
-        <Button onClick={fetchAccounts}>
-          Try Again
-        </Button>
+        <Button onClick={fetchAccounts}>Try Again</Button>
       </div>
     );
   }
@@ -170,10 +180,7 @@ export function TradingAccountModal({ allowSkip = false, onAccountSelected }: Tr
         </div>
         <div className="flex gap-2">
           {allowSkip && selectedAccount && (
-            <Button 
-              variant="outline" 
-              onClick={() => onAccountSelected?.()}
-            >
+            <Button variant="outline" onClick={() => onAccountSelected?.()}>
               Continue with Current Account
             </Button>
           )}
@@ -204,15 +211,15 @@ export function TradingAccountModal({ allowSkip = false, onAccountSelected }: Tr
               />
             </div>
             <div className="flex space-x-2">
-              <Button 
-                onClick={handleCreateAccount} 
+              <Button
+                onClick={handleCreateAccount}
                 disabled={creating || !newAccountName.trim()}
               >
                 {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Create Account
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setShowCreateForm(false);
                   setNewAccountName("");
@@ -234,18 +241,20 @@ export function TradingAccountModal({ allowSkip = false, onAccountSelected }: Tr
             {accounts.map((account) => {
               const isCurrentlySelected = selectedAccount?.id === account.id;
               const isBeingSelected = selecting === account.id;
-              
+
               return (
-                <Card 
-                  key={account.id} 
+                <Card
+                  key={account.id}
                   className={`cursor-pointer transition-all duration-200 ${
-                    isBeingSelected 
-                      ? 'opacity-50 pointer-events-none' 
+                    isBeingSelected
+                      ? "opacity-50 pointer-events-none"
                       : isCurrentlySelected
-                      ? 'border-green-500 bg-green-50/50 dark:bg-green-950/20'
-                      : 'hover:shadow-md hover:border-blue-500'
+                      ? "border-green-500 bg-green-50/50 dark:bg-green-950/20"
+                      : "hover:shadow-md hover:border-blue-500"
                   }`}
-                  onClick={() => !isBeingSelected && handleSelectAccount(account)}
+                  onClick={() =>
+                    !isBeingSelected && handleSelectAccount(account)
+                  }
                 >
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
@@ -260,23 +269,25 @@ export function TradingAccountModal({ allowSkip = false, onAccountSelected }: Tr
                         <Wallet className="h-5 w-5 text-muted-foreground" />
                       </div>
                     </CardTitle>
-                    <CardDescription>
-                      ID: {account.id}
-                    </CardDescription>
+                    <CardDescription>ID: {account.id}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
                       {account.balance !== undefined && (
                         <div className="flex justify-between">
-                          <span className="text-sm text-muted-foreground">Balance:</span>
+                          <span className="text-sm text-muted-foreground">
+                            Balance:
+                          </span>
                           <span className="font-medium">
-                            {account.balance} {account.currency || 'USD'}
+                            {account.balance} {account.currency || "USD"}
                           </span>
                         </div>
                       )}
                       {account.createdAt && (
                         <div className="flex justify-between">
-                          <span className="text-sm text-muted-foreground">Created:</span>
+                          <span className="text-sm text-muted-foreground">
+                            Created:
+                          </span>
                           <span className="text-sm">
                             {new Date(account.createdAt).toLocaleDateString()}
                           </span>
@@ -284,28 +295,35 @@ export function TradingAccountModal({ allowSkip = false, onAccountSelected }: Tr
                       )}
                       {account.isActive !== undefined && (
                         <div className="flex justify-between">
-                          <span className="text-sm text-muted-foreground">Status:</span>
-                          <span className={`text-sm font-medium ${
-                            account.isActive ? 'text-green-600' : 'text-gray-500'
-                          }`}>
-                            {account.isActive ? 'Active' : 'Inactive'}
+                          <span className="text-sm text-muted-foreground">
+                            Status:
+                          </span>
+                          <span
+                            className={`text-sm font-medium ${
+                              account.isActive
+                                ? "text-green-600"
+                                : "text-gray-500"
+                            }`}
+                          >
+                            {account.isActive ? "Active" : "Inactive"}
                           </span>
                         </div>
                       )}
                       <div className="pt-2 border-t">
-                        <p className={`text-xs font-medium ${
-                          isBeingSelected 
-                            ? 'text-blue-600' 
-                            : isCurrentlySelected 
-                            ? 'text-green-600' 
-                            : 'text-blue-600'
-                        }`}>
-                          {isBeingSelected 
-                            ? 'Selecting account...' 
-                            : isCurrentlySelected 
-                            ? 'Currently selected' 
-                            : 'Click to select this account'
-                          }
+                        <p
+                          className={`text-xs font-medium ${
+                            isBeingSelected
+                              ? "text-blue-600"
+                              : isCurrentlySelected
+                              ? "text-green-600"
+                              : "text-blue-600"
+                          }`}
+                        >
+                          {isBeingSelected
+                            ? "Selecting account..."
+                            : isCurrentlySelected
+                            ? "Currently selected"
+                            : "Click to select this account"}
                         </p>
                       </div>
                     </div>

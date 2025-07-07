@@ -19,10 +19,9 @@ export function AccountSwitcher() {
   const handleSelectAccount = async (account: any) => {
     try {
       setSwitching(account.id);
-      
+
       // Call the server action to set the trading account
       const result = await setTradingAccount(account.id);
-        console.log("Switching account result:", result);
       if (result.success) {
         setSelectedAccount(account);
         setOpen(false);
@@ -73,9 +72,8 @@ export function AccountSwitcher() {
                 )}
                 <span className="truncate">{account.name}</span>
               </div>
-              {selectedAccount.id === account.id && switching !== account.id && (
-                <Check className="w-4 h-4" />
-              )}
+              {selectedAccount.id === account.id &&
+                switching !== account.id && <Check className="w-4 h-4" />}
             </button>
           ))}
         </div>

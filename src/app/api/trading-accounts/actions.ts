@@ -205,7 +205,6 @@ export const setTradingAccount = async (
       };
     } else {
       const errorData = await response.json().catch(() => ({}));
-      console.log(response);
 
       return {
         success: false,
@@ -252,7 +251,6 @@ export const fetchWalletBalances = async (
     );
     if (response.ok) {
       const data = await response.json();
-      console.log("Wallet balances fetched:", data);
       return {
         success: true,
         data: Array.isArray(data) ? data : [],
@@ -273,6 +271,7 @@ export const fetchWalletBalances = async (
   }
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const placeLimitOrder = async (
   orderRequest: LimitOrderRequest
 ): Promise<ApiResponse<any>> => {
@@ -340,14 +339,12 @@ export const placeLimitOrder = async (
     };
   }
 };
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const placeMarketOrder = async (
   orderRequest: MarketOrderRequest
 ): Promise<ApiResponse<any>> => {
   try {
     const { tradingAccountId, symbol, side, quantity } = orderRequest;
-
-    console.log(symbol, " - - - -- - - - - -");
 
     if (!tradingAccountId || !symbol || side === undefined || !quantity) {
       return {
@@ -443,7 +440,6 @@ export const fetchOrders = async (
     }
 
     if (symbol) {
-      console.log(symbol);
       params.append("symbol", symbol);
     }
 
@@ -521,7 +517,6 @@ export const fetchLimitOrders = async (
     }
 
     if (symbol) {
-      console.log(symbol);
       params.append("symbol", symbol);
     }
 
@@ -605,7 +600,6 @@ export const fetchMarketOrders = async (
     }
 
     if (symbol) {
-      console.log(symbol);
       params.append("symbol", symbol);
     }
 
@@ -619,7 +613,6 @@ export const fetchMarketOrders = async (
         },
       }
     );
-    console.log(response);
     if (response.ok) {
       const data = await response.json();
       const orders = Array.isArray(data) ? data : data.orders || [];

@@ -177,11 +177,11 @@ export function useTradingViewAdvanced() {
   const calculateTechnicalLevels = useCallback(() => {
     if (!marketData) return null;
 
-    const { high, low, lastPrice } = marketData;
+    const { high24h, low24h, lastPrice } = marketData;
 
     // Ensure numeric values
-    const numHigh = Number(high);
-    const numLow = Number(low);
+    const numHigh = Number(high24h);
+    const numLow = Number(low24h);
     const numLastPrice = Number(lastPrice);
 
     // Pivot Points
@@ -201,7 +201,7 @@ export function useTradingViewAdvanced() {
     return {
       pivotPoints: { pivot, r1, r2, s1, s2 },
       fibonacciLevels: { fib236, fib382, fib500, fib618 },
-      range: { high, low, diff },
+      range: { high24h, low24h, diff },
     };
   }, [marketData]);
 

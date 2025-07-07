@@ -19,12 +19,10 @@ export function useTradingWebSocket() {
       );
 
       ws.onopen = () => {
-        console.log("WebSocket connected");
         setIsConnected(true);
       };
 
       ws.onclose = () => {
-        console.log("WebSocket disconnected");
         setIsConnected(false);
         // Try to reconnect after a delay
         setTimeout(connectWebSocket, 5000);
