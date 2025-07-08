@@ -1,4 +1,3 @@
-
 name: Deploy Next.js Application
 
 on:
@@ -46,11 +45,27 @@ jobs:
           APP_NAME_LOWER=$(echo "${{ env.APP_NAME }}" | tr '[:upper:]' '[:lower:]')
           DEPLOY_PATH="/www/wwwroot/${APP_NAME_LOWER}.crm-system.com"
           
+          # First, fix permissions on remote server
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'PERM_EOF'
+            cd ${{ env.DEPLOY_PATH }}
+            # Remove problematic files that can't be deleted
+            sudo rm -f .user.ini .htaccess
+            # Set proper ownership before rsync
+            sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} .
+            sudo chmod -R 755 .
+          PERM_EOF
+          
+          # Now sync files with proper exclusions
           rsync -avz --delete \
             --exclude='.git' \
             --exclude='node_modules' \
             --exclude='.env.local' \
             --exclude='.github' \
+            --exclude='.user.ini' \
+            --exclude='.htaccess' \
+            --exclude='*.log' \
+            --filter='P .user.ini' \
+            --filter='P .htaccess' \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/
           
       - name: Start Application
@@ -75,10 +90,11 @@ jobs:
             # Install production dependencies
             npm install --omit=dev
             
-            # Set permissions
+            # Set final permissions for web server
             sudo chown -R www:www .
             sudo find . -type f -exec chmod 644 {} \;
             sudo find . -type d -exec chmod 755 {} \;
+            sudo chmod +x node_modules/.bin/* 2>/dev/null || true
             
             # Create ecosystem file for PM2
             cat > ecosystem.config.js << 'ECOSYSTEM_EOF'
@@ -114,7 +130,7 @@ jobs:
             
             # Setup PM2 startup (only if not already configured)
             if ! pm2 startup | grep -q "already configured"; then
-              pm2 startup | tail -n 1 | sudo bash
+              pm2 startup | tail -n 1 | sudo bash 2>/dev/null || true
             fi
             
             echo "✅ Application deployed and running on port ${{ env.PORT }}"
