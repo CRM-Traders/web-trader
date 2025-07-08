@@ -1,31 +1,35 @@
 name: Deploy Next.js Application
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 env:
   APP_NAME: 'web-trader'
   NODE_VERSION: '20.x'
   PORT: '4799'
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
         
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }} 
+          node-version: ${{ env.NODE_VERSION }}
           
-      - name: Install pnpm
+      - name: Enable Corepack and Install pnpm
         run: |
           corepack enable
           corepack prepare pnpm@latest --activate
           pnpm --version
           
-      - name: Setup pnpm cache
+      - name: Setup pnpm Cache
         uses: actions/cache@v4
         with:
           path: ~/.pnpm-store
@@ -33,25 +37,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
             
-      - name: Install Dependencies & Build
+      - name: Install Dependencies and Build
         run: |
           pnpm install --frozen-lockfile
           pnpm run build
-          # Set deploy path
+          
+      - name: Set Deploy Path
+        run: |
           APP_NAME_LOWER=$(echo "${{ env.APP_NAME }}" | tr '[:upper:]' '[:lower:]')
           DEPLOY_PATH="/www/wwwroot/${APP_NAME_LOWER}.crm-system.com"
           echo "DEPLOY_PATH=${DEPLOY_PATH}" >> $GITHUB_ENV
           
-      - name: Setup SSH
+      - name: Setup SSH Configuration
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
           
-      - name: Deploy via Rsync & Post Setup
+      - name: Deploy Application Files
         run: |
-          # Sync files to server
           rsync -avz --delete \
             --exclude='.git' \
             --exclude='node_modules' \
@@ -61,26 +66,118 @@ jobs:
             --exclude='*.log' \
             --exclude='.htaccess' \
             --exclude='.github' \
+            --exclude='coverage' \
+            --exclude='tests' \
+            --exclude='__tests__' \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ env.DEPLOY_PATH }}/
-          # Run post-deploy setup on server
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
+          
+      - name: Server Post-Deploy Setup
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ env.DEPLOY_PATH }}
-            # Install production deps
-            pnpm install --prod
-            # File permissions
+            
+            # Install Node.js and pnpm if not exists
+            if ! command -v node &> /dev/null; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+            
+            # Install pnpm if not exists
+            if ! command -v pnpm &> /dev/null; then
+              sudo corepack enable
+              sudo corepack prepare pnpm@latest --activate
+            fi
+            
+            # Install production dependencies
+            pnpm install --prod --frozen-lockfile
+            
+            # Set proper file permissions
             sudo find . -type f -exec chmod 644 {} \;
             sudo find . -type d -exec chmod 755 {} \;
-            sudo chown -R www:www .
-            # Create startup script
-            cat > start-app.sh << 'INNER_EOF'
-            #!/bin/bash
-            cd \$(dirname \$0)
-            exec npx next start -p ${{ env.PORT }}
-            INNER_EOF
-            chmod +x start-app.sh
-            EOF
             
-      - name: Cleanup SSH
+            # Change ownership to web server user
+            sudo chown -R www:www .
+            
+            # Create startup script
+            cat > start-app.sh << 'SCRIPT_EOF'
+            #!/bin/bash
+            cd "$(dirname "$0")"
+            export NODE_ENV=production
+            exec pnpm run start
+            SCRIPT_EOF
+            
+            chmod +x start-app.sh
+            
+            # Create systemd service file (optional)
+            sudo tee /etc/systemd/system/${{ env.APP_NAME }}.service > /dev/null << 'SERVICE_EOF'
+            [Unit]
+            Description=${{ env.APP_NAME }} Next.js Application
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=www
+            WorkingDirectory=${{ env.DEPLOY_PATH }}
+            ExecStart=${{ env.DEPLOY_PATH }}/start-app.sh
+            Restart=always
+            RestartSec=10
+            Environment=NODE_ENV=production
+            Environment=PORT=${{ env.PORT }}
+
+            [Install]
+            WantedBy=multi-user.target
+            SERVICE_EOF
+            
+            # Reload systemd and enable service
+            sudo systemctl daemon-reload
+            sudo systemctl enable ${{ env.APP_NAME }}.service
+            
+            # Stop existing service if running
+            sudo systemctl stop ${{ env.APP_NAME }}.service || true
+            
+            # Start the service
+            sudo systemctl start ${{ env.APP_NAME }}.service
+            
+            # Check service status
+            sudo systemctl status ${{ env.APP_NAME }}.service --no-pager
+            
+          EOF
+          
+      - name: Verify Deployment
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}
+            
+            # Wait for application to start
+            sleep 10
+            
+            # Check if service is running
+            if sudo systemctl is-active --quiet ${{ env.APP_NAME }}.service; then
+              echo "✅ Service is running successfully"
+              
+              # Test HTTP endpoint
+              if curl -f -s -o /dev/null http://localhost:${{ env.PORT }}; then
+                echo "✅ Application is responding on port ${{ env.PORT }}"
+              else
+                echo "❌ Application is not responding"
+                exit 1
+              fi
+            else
+              echo "❌ Service failed to start"
+              sudo systemctl status ${{ env.APP_NAME }}.service --no-pager
+              exit 1
+            fi
+          EOF
+          
+      - name: Cleanup SSH Keys
         if: always()
-        run: rm -rf ~/.ssh
+        run: |
+          rm -rf ~/.ssh/id_rsa
+          
+      - name: Deployment Summary
+        run: |
+          echo "🚀 Deployment completed successfully!"
+          echo "📱 Application: ${{ env.APP_NAME }}"
+          echo "🌐 URL: http://$(echo "${{ env.APP_NAME }}" | tr '[:upper:]' '[:lower:]').crm-system.com"
+          echo "📡 Port: ${{ env.PORT }}"
