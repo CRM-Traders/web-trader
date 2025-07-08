@@ -25,6 +25,41 @@ export interface TradingViewWidget {
   [key: string]: any;
 }
 
+// Ticket Types
+export enum TicketType {
+  Deposit = 0,
+  Withdraw = 1
+}
+
+export enum TicketStatus {
+  Pending = 0,
+  Processing = 1,
+  Completed = 2,
+  Cancelled = 3,
+  Failed = 4,
+  Rejected = 5
+}
+
+export interface TicketDto {
+  id: string;
+  tradingAccountId: string;
+  type: TicketType;
+  status: TicketStatus;
+  amount: number;
+  currency: string;
+  description?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateTicketCommand {
+  tradingAccountId: string;
+  type: TicketType;
+  amount: number;
+  currency: string;
+  description?: string;
+}
+
 declare global {
   interface Window {
     TradingView: {

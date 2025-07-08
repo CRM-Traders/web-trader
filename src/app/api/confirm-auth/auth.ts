@@ -48,10 +48,10 @@ export const logout = async (): Promise<void> => {
     await clearAuthCookies();
 
     // Redirect to sign-in
-    window.location.href = "/sign-in";
+    window.location.href = "https://online.salesvault.dev/auth/login";
   } catch (error) {
     console.error("Error during logout:", error);
     // Fallback: redirect anyway
-    window.location.href = "/sign-in";
+    window.location.href = "https://online.salesvault.dev/auth/login";
   }
 };

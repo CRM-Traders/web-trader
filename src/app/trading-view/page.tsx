@@ -112,12 +112,6 @@ function AuthenticationError({ onRetry }: { onRetry: () => void }) {
             >
               Try Again
             </Button>
-            <Button
-              onClick={() => (window.location.href = "/sign-in")}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-            >
-              Sign In
-            </Button>
           </div>
         </div>
       </div>
@@ -184,8 +178,8 @@ function SpotTradingContent() {
       }
 
       if (!ctx) {
+        window.location.href = "https://online.salesvault.dev/auth/login";
         // No ctx parameter and not authenticated, redirect to sign-in
-        router.push("/sign-in");
         return;
       }
 

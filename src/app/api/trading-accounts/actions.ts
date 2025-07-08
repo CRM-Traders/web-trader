@@ -640,3 +640,218 @@ export const fetchMarketOrders = async (
     };
   }
 };
+
+// Ticket-related interfaces
+interface TicketDto {
+  id: string;
+  tradingAccountId: string;
+  type: number; // 0 for Deposit, 1 for Withdraw
+  status: number; // 0-5 for different statuses
+  amount: number;
+  currency: string;
+  description?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+interface CreateTicketCommand {
+  walletId: string;
+  type: number; // 0 for Deposit, 1 for Withdraw
+  amount: number;
+}
+
+// Ticket API actions
+export const createTicket = async (
+  command: CreateTicketCommand
+): Promise<ApiResponse<string>> => {
+  try {
+    const token = await getAccessToken();
+    if (!token) {
+      return {
+        success: false,
+        error: "Authentication required",
+      };
+    }
+
+    const response = await fetch(
+      `${process.env.BASE_TRADING_URL}/traiding/api/Ticket/create`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(command),
+      }
+    );
+
+    if (response.ok) {
+      const ticketId = await response.text();
+      return {
+        success: true,
+        data: ticketId,
+      };
+    } else {
+      const errorData = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: errorData.message || "Failed to create ticket",
+      };
+    }
+  } catch (error) {
+    console.error("Error creating ticket:", error);
+    return {
+      success: false,
+      error: "Failed to create ticket",
+    };
+  }
+};
+
+export const fetchTickets = async (
+  tradingAccountId: string,
+  pageIndex: number = 1,
+  pageSize: number = 50
+): Promise<ApiResponse<TicketDto[]>> => {
+  try {
+    const token = await getAccessToken();
+    if (!token) {
+      return {
+        success: false,
+        error: "Authentication required",
+      };
+    }
+
+    const params = new URLSearchParams({
+      TradingAccountId: tradingAccountId,
+      PageIndex: pageIndex.toString(),
+      PageSize: pageSize.toString(),
+    });
+
+    const response = await fetch(
+      `${process.env.BASE_TRADING_URL}/api/Ticket/tickets?${params}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        success: true,
+        data: Array.isArray(data) ? data : [],
+      };
+    } else {
+      console.error("Failed to fetch tickets:", response.status);
+      return {
+        success: false,
+        error: `Failed to fetch tickets: ${response.status}`,
+      };
+    }
+  } catch (error) {
+    console.error("Error fetching tickets:", error);
+    return {
+      success: false,
+      error: "Failed to load tickets",
+    };
+  }
+};
+
+export const fetchTicketById = async (
+  ticketId: string
+): Promise<ApiResponse<TicketDto>> => {
+  try {
+    const token = await getAccessToken();
+    if (!token) {
+      return {
+        success: false,
+        error: "Authentication required",
+      };
+    }
+
+    const params = new URLSearchParams({
+      TicketId: ticketId,
+    });
+
+    const response = await fetch(
+      `${process.env.BASE_TRADING_URL}/api/Ticket/ticket-by-id?${params}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        success: true,
+        data,
+      };
+    } else {
+      console.error("Failed to fetch ticket:", response.status);
+      return {
+        success: false,
+        error: `Failed to fetch ticket: ${response.status}`,
+      };
+    }
+  } catch (error) {
+    console.error("Error fetching ticket:", error);
+    return {
+      success: false,
+      error: "Failed to load ticket",
+    };
+  }
+};
+
+export const deleteTicket = async (
+  ticketId: string
+): Promise<ApiResponse<void>> => {
+  try {
+    const token = await getAccessToken();
+    if (!token) {
+      return {
+        success: false,
+        error: "Authentication required",
+      };
+    }
+
+    const params = new URLSearchParams({
+      TicketId: ticketId,
+    });
+
+    const response = await fetch(
+      `${process.env.BASE_TRADING_URL}/api/Ticket/delete?${params}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (response.ok) {
+      return {
+        success: true,
+      };
+    } else {
+      console.error("Failed to delete ticket:", response.status);
+      return {
+        success: false,
+        error: `Failed to delete ticket: ${response.status}`,
+      };
+    }
+  } catch (error) {
+    console.error("Error deleting ticket:", error);
+    return {
+      success: false,
+      error: "Failed to delete ticket",
+    };
+  }
+};

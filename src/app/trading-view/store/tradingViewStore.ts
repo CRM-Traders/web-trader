@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useState, useEffect } from "react";
-import { fetchWalletBalances, placeLimitOrder, placeMarketOrder, fetchOrders, fetchLimitOrders, fetchMarketOrders } from "@/app/api/trading-accounts/actions";
+import { fetchWalletBalances, placeLimitOrder, placeMarketOrder, fetchOrders, fetchLimitOrders, fetchMarketOrders, fetchTickets } from "@/app/api/trading-accounts/actions";
 
 // Types
 export interface MarketData {
@@ -30,6 +30,19 @@ export interface TradingAccount {
   id: string;
   name: string;
   wallets: WalletBalance[];
+}
+
+// Ticket interfaces
+export interface Ticket {
+  id: string;
+  tradingAccountId: string;
+  type: number; // 0 for Deposit, 1 for Withdraw
+  status: number; // 0-5 for different statuses
+  amount: number;
+  currency: string;
+  description?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 // Define the Order interface
@@ -70,6 +83,10 @@ interface TradingState {
   // Wallet balances
   walletBalances: WalletBalance[];
 
+  // Tickets
+  tickets: Ticket[];
+  ticketHistory: Ticket[];
+
   // Actions
   setSelectedSymbol: (symbol: string) => void;
   setAvailableSymbols: (symbols: string[]) => void;
@@ -89,10 +106,15 @@ interface TradingState {
     currency: string,
     balance: Partial<WalletBalance>
   ) => void;
+  setTickets: (tickets: Ticket[]) => void;
+  setTicketHistory: (tickets: Ticket[]) => void;
+  addTicket: (ticket: Ticket) => void;
+  updateTicket: (ticketId: string, updates: Partial<Ticket>) => void;
   loadOrders: () => Promise<void>;
   loadLimitOrders: () => Promise<void>;
   loadMarketOrders: () => Promise<void>;
   loadWalletBalances: () => Promise<void>;
+  loadTickets: () => Promise<void>;
   placeOrder: (orderData: {
     symbol: string;
     side: "BUY" | "SELL";
@@ -126,6 +148,8 @@ export const useTradingStore = create<TradingState>()(
       chartType: "candles",
       chartIndicators: [],
       walletBalances: [],
+      tickets: [],
+      ticketHistory: [],
 
       // Actions
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
@@ -142,6 +166,15 @@ export const useTradingStore = create<TradingState>()(
       setChartType: (type) => set({ chartType: type }),
       setChartIndicators: (indicators) => set({ chartIndicators: indicators }),
       setWalletBalances: (balances) => set({ walletBalances: balances }),
+      setTickets: (tickets) => set({ tickets }),
+      setTicketHistory: (tickets) => set({ ticketHistory: tickets }),
+      addTicket: (ticket) => set((state) => ({ tickets: [...state.tickets, ticket] })),
+      updateTicket: (ticketId, updates) =>
+        set((state) => ({
+          tickets: state.tickets.map((ticket) =>
+            ticket.id === ticketId ? { ...ticket, ...updates } : ticket
+          ),
+        })),
 
       updateWalletBalance: (currency, updates) =>
         set((state) => ({
@@ -285,6 +318,23 @@ export const useTradingStore = create<TradingState>()(
           }
         } catch (error) {
           console.error("Failed to load wallet balances:", error);
+        }
+      },
+
+      loadTickets: async () => {
+        try {
+          const { selectedAccount } = get();
+          if (!selectedAccount?.id) return;
+
+          // Call the API to fetch tickets
+          const response = await fetchTickets(selectedAccount.id); // Assuming fetchTickets is a new function
+          if (response.success && response.data) {
+            set({ tickets: response.data });
+          } else {
+            console.error("Failed to load tickets:", response.error);
+          }
+        } catch (error) {
+          console.error("Failed to load tickets:", error);
         }
       },
 
