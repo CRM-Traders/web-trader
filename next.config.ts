@@ -11,6 +11,15 @@ const nextConfig: NextConfig = {
     },
   },
   productionBrowserSourceMaps: true,
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/trading-view',
+        permanent: true,
+      },
+    ]
+  },
 };
 
 export default nextConfig;
