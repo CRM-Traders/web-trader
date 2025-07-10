@@ -1,8 +1,3 @@
-interface RefreshTokenRequest {
-  accessToken: string;
-  refreshToken: string;
-}
-
 interface RefreshTokenResponse {
   success: boolean;
   data?: {
@@ -14,13 +9,20 @@ interface RefreshTokenResponse {
 }
 
 export async function postRefreshToken(
-  accessToken: string,
   refreshToken: string
 ): Promise<RefreshTokenResponse> {
-  console.log("postRefreshToken", {
-    accessToken: accessToken,
-    refreshToken: refreshToken,
-  });
+  console.log(
+    "🔄 [postRefreshToken] Attempting to refresh token with refreshToken:",
+    refreshToken?.substring(0, 20) + "..."
+  );
+
+  if (!refreshToken) {
+    return {
+      success: false,
+      error: "No refresh token provided",
+    };
+  }
+
   try {
     const response = await fetch(
       `${process.env.BASE_IDENTITY_URL}/api/auth/refresh-token`,
@@ -30,35 +32,46 @@ export async function postRefreshToken(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          accessToken,
-          refreshToken,
-        } as RefreshTokenRequest),
+          refreshToken: refreshToken,
+        }),
       }
     );
-    
+
+    console.log("🔄 [postRefreshToken] Response status:", response.status);
+
     if (response.ok) {
       const data = await response.json();
+      console.log("🔄 [postRefreshToken] Refresh successful:", {
+        hasAccessToken: !!data.accessToken,
+        hasRefreshToken: !!data.refreshToken,
+        expires_in: data.expires_in,
+      });
+
       return {
         success: true,
         data: {
           accessToken: data.accessToken,
-          refreshToken: data.refreshToken, // Use existing if not provided
+          refreshToken: data.refreshToken,
           expires_in: data.expires_in,
         },
       };
     } else {
       const errorText = await response.text();
-      console.error("Failed to refresh token:", response.status, errorText);
+      console.error(
+        "❌ [postRefreshToken] Failed to refresh token:",
+        response.status,
+        errorText
+      );
       return {
         success: false,
         error: `Failed to refresh token: ${response.status}`,
       };
     }
   } catch (error) {
-    console.error("Error refreshing token:", error);
+    console.error("💥 [postRefreshToken] Error refreshing token:", error);
     return {
       success: false,
       error: "Network error during token refresh",
     };
   }
-} 
+}

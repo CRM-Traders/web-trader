@@ -5,24 +5,36 @@ import { useTradingStore } from "@/app/trading-view/store/tradingViewStore";
 // Helper function to convert status number to string
 const statusToString = (status: number): string => {
   switch (status) {
-    case 1: return "PENDING";
-    case 2: return "PARTIALLY_FILLED";
-    case 3: return "FILLED";
-    case 4: return "CANCELLED";
-    case 5: return "REJECTED";
-    default: return "UNKNOWN";
+    case 1:
+      return "PENDING";
+    case 2:
+      return "PARTIALLY_FILLED";
+    case 3:
+      return "FILLED";
+    case 4:
+      return "CANCELLED";
+    case 5:
+      return "REJECTED";
+    default:
+      return "UNKNOWN";
   }
 };
 
 // Helper function to get status styling
 const getStatusStyle = (status: number): string => {
   switch (status) {
-    case 3: return "text-green-600"; // FILLED
-    case 1: return "text-blue-600"; // PENDING
-    case 2: return "text-yellow-600"; // PARTIALLY_FILLED
-    case 4: return "text-red-600"; // CANCELLED
-    case 5: return "text-red-600"; // REJECTED
-    default: return "text-gray-600";
+    case 3:
+      return "text-green-600"; // FILLED
+    case 1:
+      return "text-blue-600"; // PENDING
+    case 2:
+      return "text-yellow-600"; // PARTIALLY_FILLED
+    case 4:
+      return "text-red-600"; // CANCELLED
+    case 5:
+      return "text-red-600"; // REJECTED
+    default:
+      return "text-gray-600";
   }
 };
 
@@ -33,7 +45,6 @@ interface OrderHistoryProps {
 export function OrderHistory({ type }: OrderHistoryProps) {
   const { openOrders, orderHistory, tradeHistory } = useTradingStore();
 
-  // Select the appropriate data based on type
   const orders =
     type === "open"
       ? openOrders
@@ -45,7 +56,7 @@ export function OrderHistory({ type }: OrderHistoryProps) {
     openOrders,
     orderHistory,
     tradeHistory,
-    selectedOrders: orders
+    selectedOrders: orders,
   });
 
   if (orders.length === 0) {
@@ -83,7 +94,9 @@ export function OrderHistory({ type }: OrderHistoryProps) {
               <td className="p-2">
                 <span
                   className={
-                    order.side === "BUY" ? "text-green-500" : "text-red-500"
+                    String(order.side) === "BUY"
+                      ? "text-green-500"
+                      : "text-red-500"
                   }
                 >
                   {order.side}

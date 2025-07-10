@@ -11,4 +11,4 @@ export const COOKIE_CONFIG = {
     name: "refreshToken",
     maxAge: 60 * 60 * 24 * 7, // 7 days
   },
-} as const; 
+} as const;

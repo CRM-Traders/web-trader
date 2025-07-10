@@ -3,9 +3,22 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useState, useEffect } from "react";
-import { fetchWalletBalances, placeLimitOrder, placeMarketOrder, fetchOrders, fetchLimitOrders, fetchMarketOrders } from "@/app/api/trading-accounts/actions";
+import {
+  fetchOrders,
+  fetchLimitOrders,
+  fetchMarketOrders,
+  fetchWalletBalances,
+  placeLimitOrder,
+  placeMarketOrder,
+} from "@/app/api/trading";
+import type {
+  Order,
+  WalletDto,
+  LimitOrderRequest,
+  MarketOrderRequest,
+} from "@/app/api/types/trading";
 
-// Types
+// Store-specific interfaces
 export interface MarketData {
   symbol: string;
   lastPrice: string;
@@ -15,7 +28,6 @@ export interface MarketData {
   low24h: string;
 }
 
-// Add these interfaces after the existing ones
 export interface WalletBalance {
   id: string;
   currency: string;
@@ -32,20 +44,11 @@ export interface TradingAccount {
   wallets: WalletBalance[];
 }
 
-// Define the Order interface
-interface Order {
-  id: string;
-  symbol: string;
-  side: "BUY" | "SELL";
-  type: "LIMIT" | "MARKET";
-  price?: number;
-  quantity: number;
-  status: number; // 1=Pending, 2=PartiallyFilled, 3=Filled, 4=Cancelled, 5=Rejected
-  createdAt: string;
-}
-
-// Update the TradingState interface to include:
 interface TradingState {
+  // User identification
+  currentUserId: string | null;
+  authTimestamp: number | null;
+
   // Market data
   selectedSymbol: string;
   availableSymbols: string[];
@@ -70,7 +73,14 @@ interface TradingState {
   // Wallet balances
   walletBalances: WalletBalance[];
 
+  // Loading states
+  isLoadingOrders: boolean;
+  isLoadingWallets: boolean;
+  isPlacingOrder: boolean;
+
   // Actions
+  setCurrentUserId: (userId: string | null) => void;
+  setAuthTimestamp: (timestamp: number | null) => void;
   setSelectedSymbol: (symbol: string) => void;
   setAvailableSymbols: (symbols: string[]) => void;
   setMarketData: (data: MarketData) => void;
@@ -89,12 +99,12 @@ interface TradingState {
     currency: string,
     balance: Partial<WalletBalance>
   ) => void;
+
+  // Async actions
   loadOrders: () => Promise<void>;
   loadLimitOrders: () => Promise<void>;
   loadMarketOrders: () => Promise<void>;
   loadWalletBalances: () => Promise<void>;
-  resetStore: () => void;
-
   placeOrder: (orderData: {
     symbol: string;
     side: "BUY" | "SELL";
@@ -102,67 +112,94 @@ interface TradingState {
     price?: number;
     quantity: number;
   }) => Promise<boolean>;
+
+  // Utility actions
+  resetStore: () => void;
+  clearUserData: () => void;
 }
 
-// Helper function to convert side to number
-const sideToNumber = (side: "BUY" | "SELL"): number => {
-  return side === "BUY" ? 1 : 2; // 1 for BUY, 2 for SELL (matching C# OrderSide enum)
+// Helper functions
+const mapWalletDtoToWalletBalance = (wallet: WalletDto): WalletBalance => ({
+  id: wallet.id,
+  currency: wallet.currency,
+  availableBalance: wallet.availableBalance,
+  totalBalance: wallet.totalBalance,
+  lockedBalance: wallet.lockedBalance,
+  usdEquivalent: wallet.usdEquivalent,
+  lastPriceUpdate: wallet.lastPriceUpdate,
+});
+
+const isOrderOpen = (status: string): boolean => {
+  return status === "PENDING" || status === "PARTIALLY_FILLED";
 };
 
-// Helper function to convert type number to string
-const typeToString = (type: number): "LIMIT" | "MARKET" => {
-  return type === 2 ? "LIMIT" : "MARKET"; // 2 for LIMIT, 1 for MARKET
+const isOrderCompleted = (status: string): boolean => {
+  return status === "FILLED" || status === "CANCELLED" || status === "REJECTED";
 };
 
-// Helper function to convert status number to string
-const statusToString = (status: number): string => {
-  switch (status) {
-    case 1: return "PENDING";
-    case 2: return "PARTIALLY_FILLED";
-    case 3: return "FILLED";
-    case 4: return "CANCELLED";
-    case 5: return "REJECTED";
-    default: return "UNKNOWN";
+import type { OrderSide } from "@/app/api/types/trading";
+
+const sideToOrderSide = (side: "BUY" | "SELL"): OrderSide => {
+  return side as any;
+};
+
+// Get user ID and auth timestamp from cookies
+const getCurrentUserInfo = (): {
+  userId: string | null;
+  authTimestamp: number | null;
+} => {
+  if (typeof window === "undefined")
+    return { userId: null, authTimestamp: null };
+
+  const authTimestampCookie = document.cookie
+    .split(";")
+    .find((cookie) => cookie.trim().startsWith("auth_timestamp="));
+  const authTimestamp = authTimestampCookie
+    ? Number.parseInt(authTimestampCookie.split("=")[1])
+    : null;
+
+  const userCookie = document.cookie
+    .split(";")
+    .find((cookie) => cookie.trim().startsWith("user_info="));
+
+  if (userCookie) {
+    const userInfoStr = userCookie.split("=")[1];
+    const userInfo = JSON.parse(decodeURIComponent(userInfoStr));
+    return {
+      userId: userInfo.id || userInfo.userId || null,
+      authTimestamp,
+    };
   }
-};
 
-// Helper function to check if order is open/pending
-const isOrderOpen = (status: number): boolean => {
-  return status === 1 || status === 2; // Pending or PartiallyFilled
-};
+  const sessionCookie = document.cookie
+    .split(";")
+    .find((cookie) => cookie.trim().startsWith("session="));
 
-// Helper function to check if order is completed
-const isOrderCompleted = (status: number): boolean => {
-  return status === 3 || status === 4 || status === 5; // Filled, Cancelled, or Rejected
-};
-
-// Helper function to get user-specific storage key
-const getStorageKey = (): string => {
-  if (typeof window === "undefined") return "trading-store";
-  
-  try {
-    const cookies = document.cookie.split(";");
-    const userCookie = cookies.find((cookie) =>
-      cookie.trim().startsWith("user_info=")
-    );
-
-    if (userCookie) {
-      const userInfoStr = userCookie.split("=")[1];
-      const userInfo = JSON.parse(decodeURIComponent(userInfoStr));
-      return `trading-store-${userInfo.id}`;
-    }
-  } catch (error) {
-    console.error("Error getting user-specific storage key:", error);
+  if (sessionCookie) {
+    const sessionValue = sessionCookie.split("=")[1];
+    const sessionData = JSON.parse(decodeURIComponent(sessionValue));
+    return {
+      userId: sessionData.user?.id || null,
+      authTimestamp,
+    };
   }
-  
-  return "trading-store";
+
+  return { userId: null, authTimestamp: null };
 };
 
-// Create store with persistence
+// Generate storage key based on current user
+const getStorageKey = (userId: string | null): string => {
+  if (!userId) return "trading-store-anonymous";
+  return `trading-store-${userId}`;
+};
+
+// Create store with user-specific persistence
 export const useTradingStore = create<TradingState>()(
   persist(
     (set, get) => ({
       // Default values
+      currentUserId: null,
+      authTimestamp: null,
       selectedSymbol: "BTC/USDT",
       availableSymbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"],
       marketData: null,
@@ -177,8 +214,39 @@ export const useTradingStore = create<TradingState>()(
       chartType: "candles",
       chartIndicators: [],
       walletBalances: [],
+      isLoadingOrders: false,
+      isLoadingWallets: false,
+      isPlacingOrder: false,
 
-      // Actions
+      // Basic setters
+      setCurrentUserId: (userId) => {
+        const currentState = get();
+        if (currentState.currentUserId !== userId) {
+          console.log("🔄 User changed, clearing user-specific data:", {
+            from: currentState.currentUserId,
+            to: userId,
+          });
+          get().clearUserData();
+        }
+        set({ currentUserId: userId });
+      },
+
+      setAuthTimestamp: (timestamp) => {
+        const currentState = get();
+        if (
+          currentState.authTimestamp &&
+          timestamp &&
+          currentState.authTimestamp !== timestamp
+        ) {
+          console.log("🔄 Auth timestamp changed, clearing user data:", {
+            from: currentState.authTimestamp,
+            to: timestamp,
+          });
+          get().clearUserData();
+        }
+        set({ authTimestamp: timestamp });
+      },
+
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
       setAvailableSymbols: (symbols) => set({ availableSymbols: symbols }),
       setMarketData: (data) => set({ marketData: data }),
@@ -201,286 +269,328 @@ export const useTradingStore = create<TradingState>()(
           ),
         })),
 
-      // Reset store to initial state (useful when switching users)
-      resetStore: () => set({
-        selectedSymbol: "BTC/USDT",
-        availableSymbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"],
-        marketData: null,
-        selectedAccount: null,
-        accounts: [],
-        openOrders: [],
-        orderHistory: [],
-        tradeHistory: [],
-        limitOrders: [],
-        marketOrders: [],
-        chartTimeframe: "1D",
-        chartType: "candles",
-        chartIndicators: [],
-        walletBalances: [],
-      }),
+      clearUserData: () => {
+        console.log("🧹 Clearing all user-specific data from store");
+        set({
+          selectedAccount: null,
+          accounts: [],
+          openOrders: [],
+          orderHistory: [],
+          tradeHistory: [],
+          limitOrders: [],
+          marketOrders: [],
+          walletBalances: [],
+          isLoadingOrders: false,
+          isLoadingWallets: false,
+          isPlacingOrder: false,
+        });
+      },
 
-      // Load orders from API
+      // Async actions
       loadOrders: async () => {
-        try {
-          const { selectedAccount, selectedSymbol } = get();
-          if (!selectedAccount?.id) return;
+        const { selectedAccount, selectedSymbol } = get();
+        if (!selectedAccount?.id) return;
 
-          // Fetch all orders for the selected account
-          const ordersResponse = await fetchOrders({
-            tradingAccountId: selectedAccount.id,
-            symbol: selectedSymbol,
-            pageIndex: 1,
-            pageSize: 100
+        set({ isLoadingOrders: true });
+
+        const response = await fetchOrders({
+          tradingAccountId: selectedAccount.id,
+          symbol: selectedSymbol,
+          pageIndex: 1,
+          pageSize: 100,
+        });
+
+        if (response.success && response.data) {
+          const orders = response.data;
+          const openOrders = orders.filter((order: any) =>
+            isOrderOpen(order.status)
+          );
+          const completedOrders = orders.filter((order: any) =>
+            isOrderCompleted(order.status)
+          );
+          const tradeHistory = completedOrders.filter(
+            (order: any) => order.status === "FILLED"
+          );
+
+          set({
+            openOrders,
+            orderHistory: completedOrders,
+            tradeHistory,
           });
-
-          if (ordersResponse.success && ordersResponse.data) {
-            console.log("Orders response in store:", ordersResponse.data);
-            
-            // Convert the orders to match our interface
-            const orders: Order[] = ordersResponse.data.map(order => ({
-              id: order.id,
-              symbol: order.symbol,
-              side: order.side === 1 ? "BUY" : "SELL", // 1 for BUY, 2 for SELL
-              type: typeToString(order.type),
-              price: order.price,
-              quantity: order.quantity,
-              status: order.status,
-              createdAt: order.createdAt,
-            }));
-
-            console.log("Mapped orders:", orders);
-
-            // Separate open orders from completed orders
-            const openOrders = orders.filter(order => isOrderOpen(order.status));
-            const completedOrders = orders.filter(order => isOrderCompleted(order.status));
-
-            console.log("Open orders:", openOrders);
-            console.log("Completed orders:", completedOrders);
-
-            set({
-              openOrders,
-              orderHistory: completedOrders,
-              tradeHistory: completedOrders.filter(order => order.status === 3), // FILLED = 3
-            });
-          } else {
-            console.error("Failed to load orders:", ordersResponse.error);
-          }
-        } catch (error) {
-          console.error("Failed to load orders:", error);
+        } else {
+          console.error("Failed to load orders:", response.statusCode);
         }
+
+        set({ isLoadingOrders: false });
       },
 
-      // Load limit orders from API
       loadLimitOrders: async () => {
-        try {
-          const { selectedAccount, selectedSymbol } = get();
-          if (!selectedAccount?.id) return;
+        const { selectedAccount, selectedSymbol } = get();
+        if (!selectedAccount?.id) return;
 
-          // Fetch limit orders for the selected account
-          const ordersResponse = await fetchLimitOrders({
-            tradingAccountId: selectedAccount.id,
-            symbol: selectedSymbol,
-            pageIndex: 1,
-            pageSize: 100
-          });
+        set({ isLoadingOrders: true });
 
-          if (ordersResponse.success && ordersResponse.data) {
-            console.log("Limit orders response in store:", ordersResponse.data);
-            
-            // Convert the orders to match our interface
-            const orders: Order[] = ordersResponse.data.map(order => ({
-              id: order.id,
-              symbol: order.symbol,
-              side: order.side === 1 ? "BUY" : "SELL", // 1 for BUY, 2 for SELL
-              type: typeToString(order.type),
-              price: order.price,
-              quantity: order.quantity,
-              status: order.status,
-              createdAt: order.createdAt,
-            }));
+        const response = await fetchLimitOrders({
+          tradingAccountId: selectedAccount.id,
+          symbol: selectedSymbol,
+          pageIndex: 1,
+          pageSize: 100,
+        });
 
-            console.log("Mapped limit orders:", orders);
-            set({ limitOrders: orders });
-          } else {
-            console.error("Failed to load limit orders:", ordersResponse.error);
-          }
-        } catch (error) {
-          console.error("Failed to load limit orders:", error);
+        if (response.success && response.data) {
+          set({ limitOrders: response.data });
+        } else {
+          console.error("Failed to load limit orders:", response.statusCode);
         }
+
+        set({ isLoadingOrders: false });
       },
 
-      // Load market orders from API
       loadMarketOrders: async () => {
-        try {
-          const { selectedAccount, selectedSymbol } = get();
-          if (!selectedAccount?.id) return;
+        const { selectedAccount, selectedSymbol } = get();
+        if (!selectedAccount?.id) return;
 
-          // Fetch market orders for the selected account
-          const ordersResponse = await fetchMarketOrders({
-            tradingAccountId: selectedAccount.id,
-            symbol: selectedSymbol,
-            pageIndex: 1,
-            pageSize: 100
-          });
+        set({ isLoadingOrders: true });
 
-          if (ordersResponse.success && ordersResponse.data) {
-            console.log("Market orders response in store:", ordersResponse.data);
-            
-            // Convert the orders to match our interface
-            const orders: Order[] = ordersResponse.data.map(order => ({
-              id: order.id,
-              symbol: order.symbol,
-              side: order.side === 1 ? "BUY" : "SELL", // 1 for BUY, 2 for SELL
-              type: typeToString(order.type),
-              price: order.price,
-              quantity: order.quantity,
-              status: order.status,
-              createdAt: order.createdAt,
-            }));
+        const response = await fetchMarketOrders({
+          tradingAccountId: selectedAccount.id,
+          symbol: selectedSymbol,
+          pageIndex: 1,
+          pageSize: 100,
+        });
 
-            console.log("Mapped market orders:", orders);
-            set({ marketOrders: orders });
-          } else {
-            console.error("Failed to load market orders:", ordersResponse.error);
-          }
-        } catch (error) {
-          console.error("Failed to load market orders:", error);
+        if (response.success && response.data) {
+          set({ marketOrders: response.data });
+        } else {
+          console.error("Failed to load market orders:", response.statusCode);
         }
+
+        set({ isLoadingOrders: false });
       },
 
       loadWalletBalances: async () => {
-        try {
-          const { selectedAccount } = get();
-          if (!selectedAccount?.id) return;
+        const { selectedAccount } = get();
+        if (!selectedAccount?.id) return;
 
-          // Call the API to fetch wallet balances
-          const response = await fetchWalletBalances(selectedAccount.id);
-          
-          if (response.success && response.data) {
-            set({ walletBalances: response.data });
-          } else {
-            console.error("Failed to load wallet balances:", response.error);
-          }
-        } catch (error) {
-          console.error("Failed to load wallet balances:", error);
+        set({ isLoadingWallets: true });
+
+        const response = await fetchWalletBalances(selectedAccount.id);
+
+        if (response.success && response.data) {
+          const walletBalances = response.data.map(mapWalletDtoToWalletBalance);
+          set({ walletBalances });
+        } else {
+          console.error("Failed to load wallet balances:", response.statusCode);
         }
+
+        set({ isLoadingWallets: false });
       },
 
       placeOrder: async (orderData) => {
-        try {
-          const {
-            selectedAccount,
-            walletBalances,
-            setWalletBalances,
-            setOpenOrders,
-            openOrders,
-            loadWalletBalances,
-          } = get();
-          
-          if (!selectedAccount?.id) {
-            throw new Error("No trading account selected");
+        const {
+          selectedAccount,
+          walletBalances,
+          loadWalletBalances,
+          loadOrders,
+        } = get();
+
+        if (!selectedAccount?.id) {
+          console.error("No trading account selected");
+          return false;
+        }
+
+        set({ isPlacingOrder: true });
+
+        // Pre-flight balance check
+        const [baseCurrency, quoteCurrency] = orderData.symbol.split("/");
+
+        if (orderData.side === "BUY") {
+          const quoteWallet = walletBalances.find(
+            (w) => w.currency === quoteCurrency
+          );
+          const estimatedTotal = orderData.price
+            ? orderData.price * orderData.quantity
+            : orderData.quantity;
+
+          if (!quoteWallet || quoteWallet.availableBalance < estimatedTotal) {
+            console.error(`Insufficient ${quoteCurrency} balance`);
+            set({ isPlacingOrder: false });
+            return false;
+          }
+        } else {
+          const baseWallet = walletBalances.find(
+            (w) => w.currency === baseCurrency
+          );
+
+          if (!baseWallet || baseWallet.availableBalance < orderData.quantity) {
+            console.error(`Insufficient ${baseCurrency} balance`);
+            set({ isPlacingOrder: false });
+            return false;
+          }
+        }
+
+        let response;
+
+        if (orderData.type === "LIMIT") {
+          if (!orderData.price) {
+            console.error("Price is required for limit orders");
+            set({ isPlacingOrder: false });
+            return false;
           }
 
-          const [baseCurrency, quoteCurrency] = orderData.symbol.split("/");
-
-          // Pre-flight balance check
-          if (orderData.side === "BUY") {
-            const quoteWallet = walletBalances.find(
-              (w) => w.currency === quoteCurrency
-            );
-            const estimatedTotal = orderData.price 
-              ? orderData.price * orderData.quantity 
-              : orderData.quantity; // For market orders, quantity might be in quote currency
-            
-            if (!quoteWallet || quoteWallet.availableBalance < estimatedTotal) {
-              throw new Error(`Insufficient ${quoteCurrency} balance`);
-            }
-          } else {
-            const baseWallet = walletBalances.find(
-              (w) => w.currency === baseCurrency
-            );
-            if (
-              !baseWallet ||
-              baseWallet.availableBalance < orderData.quantity
-            ) {
-              throw new Error(`Insufficient ${baseCurrency} balance`);
-            }
-          }
-
-          // Prepare API request data
-          let response;
-          
-          // Call the appropriate API function
-          if (orderData.type === "LIMIT") {
-            if (!orderData.price) {
-              throw new Error("Price is required for limit orders");
-            }
-            const limitOrderData = {
-              tradingAccountId: selectedAccount.id,
-              symbol: orderData.symbol,
-              side: sideToNumber(orderData.side),
-              quantity: orderData.quantity,
-              price: orderData.price,
-              type: 2 // LIMIT enum value
-            };
-            console.log("Sending LIMIT order:", limitOrderData);
-            response = await placeLimitOrder(limitOrderData);
-          } else {
-            const marketOrderData = {
-              tradingAccountId: selectedAccount.id,
-              symbol: orderData.symbol,
-              side: sideToNumber(orderData.side),
-              quantity: orderData.quantity,
-              type: 1 // MARKET enum value
-            };
-            console.log("Sending MARKET order:", marketOrderData);
-            response = await placeMarketOrder(marketOrderData);
-          }
-
-          if (!response.success) {
-            throw new Error(response.error || "Failed to place order");
-          }
-
-          // Create new order object for local state
-          const newOrder: Order = {
-            id: response.data?.id || `order_${Date.now()}`,
+          const limitOrderRequest: LimitOrderRequest = {
+            tradingAccountId: selectedAccount.id,
             symbol: orderData.symbol,
-            side: orderData.side,
-            type: orderData.type,
-            price: orderData.price,
+            side: sideToOrderSide(orderData.side),
             quantity: orderData.quantity,
-            status: response.data?.status || "OPEN",
-            createdAt: response.data?.createdAt || new Date().toISOString(),
+            price: orderData.price,
           };
 
-          // Update local state
-          setOpenOrders([...openOrders, newOrder]);
+          response = await placeLimitOrder(limitOrderRequest);
+        } else {
+          const marketOrderRequest: MarketOrderRequest = {
+            tradingAccountId: selectedAccount.id,
+            symbol: orderData.symbol,
+            side: sideToOrderSide(orderData.side),
+            quantity: orderData.quantity,
+          };
 
-          // Reload wallet balances to get updated amounts
-          await loadWalletBalances();
-
-          // Reload orders to get the latest order status
-          await get().loadOrders();
-
-          return true;
-        } catch (error) {
-          console.error("Failed to place order:", error);
-          throw error;
+          response = await placeMarketOrder(marketOrderRequest);
         }
+
+        if (response.success) {
+          // Reload data to get updated state
+          await Promise.all([loadWalletBalances(), loadOrders()]);
+
+          set({ isPlacingOrder: false });
+          return true;
+        } else {
+          console.error("Failed to place order:", response.statusCode);
+          set({ isPlacingOrder: false });
+          return false;
+        }
+      },
+
+      // Reset store to initial state
+      resetStore: () => {
+        console.log("🔄 Resetting entire store");
+        set({
+          currentUserId: null,
+          authTimestamp: null,
+          selectedSymbol: "BTC/USDT",
+          availableSymbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"],
+          marketData: null,
+          selectedAccount: null,
+          accounts: [],
+          openOrders: [],
+          orderHistory: [],
+          tradeHistory: [],
+          limitOrders: [],
+          marketOrders: [],
+          chartTimeframe: "1D",
+          chartType: "candles",
+          chartIndicators: [],
+          walletBalances: [],
+          isLoadingOrders: false,
+          isLoadingWallets: false,
+          isPlacingOrder: false,
+        });
       },
     }),
     {
-      name: getStorageKey(),
+      name: "trading-store",
+      partialize: (state) => {
+        // Only persist non-user-specific settings
+        return {
+          selectedSymbol: state.selectedSymbol,
+          chartTimeframe: state.chartTimeframe,
+          chartType: state.chartType,
+          chartIndicators: state.chartIndicators,
+        };
+      },
+      storage: {
+        getItem: (name) => {
+          if (typeof window === "undefined") return null;
+          const { userId } = getCurrentUserInfo();
+          const key = getStorageKey(userId);
+          const item = localStorage.getItem(key);
+          return item ? JSON.parse(item) : null;
+        },
+        setItem: (name, value) => {
+          if (typeof window === "undefined") return;
+          const { userId } = getCurrentUserInfo();
+          const key = getStorageKey(userId);
+          localStorage.setItem(key, JSON.stringify(value));
+        },
+        removeItem: (name) => {
+          if (typeof window === "undefined") return;
+          const { userId } = getCurrentUserInfo();
+          const key = getStorageKey(userId);
+          localStorage.removeItem(key);
+        },
+      },
     }
   )
 );
 
+// Hook to initialize user context in the store
+export function useInitializeUser() {
+  const { setCurrentUserId, setAuthTimestamp, currentUserId, authTimestamp } =
+    useTradingStore();
+
+  useEffect(() => {
+    const { userId, authTimestamp: newAuthTimestamp } = getCurrentUserInfo();
+
+    console.log("🔍 Initializing user in trading store:", {
+      userId,
+      currentUserId,
+      newAuthTimestamp,
+      currentAuthTimestamp: authTimestamp,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Set auth timestamp first (this will clear data if changed)
+    if (newAuthTimestamp !== authTimestamp) {
+      setAuthTimestamp(newAuthTimestamp);
+    }
+
+    // Then set user ID
+    if (userId !== currentUserId) {
+      setCurrentUserId(userId);
+    }
+  }, [setCurrentUserId, setAuthTimestamp, currentUserId, authTimestamp]);
+
+  // Check for changes periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const { userId, authTimestamp: newAuthTimestamp } = getCurrentUserInfo();
+
+      if (newAuthTimestamp !== authTimestamp) {
+        console.log("🔄 Auth timestamp change detected:", {
+          from: authTimestamp,
+          to: newAuthTimestamp,
+        });
+        setAuthTimestamp(newAuthTimestamp);
+      }
+
+      if (userId && userId !== currentUserId) {
+        console.log("🔄 User change detected:", {
+          from: currentUserId,
+          to: userId,
+        });
+        setCurrentUserId(userId);
+      }
+    }, 2000); // Check every 2 seconds
+
+    return () => clearInterval(interval);
+  }, [currentUserId, authTimestamp, setCurrentUserId, setAuthTimestamp]);
+}
+
 // Function to clear all trading store data from localStorage
 export const clearAllTradingStoreData = () => {
   if (typeof window === "undefined") return;
-  
-  // Clear all localStorage keys that start with "trading-store"
-  Object.keys(localStorage).forEach(key => {
+
+  Object.keys(localStorage).forEach((key) => {
     if (key.startsWith("trading-store")) {
       localStorage.removeItem(key);
     }

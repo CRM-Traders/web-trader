@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/popover";
 import { Wallet, Check, ChevronDown, Loader2 } from "lucide-react";
 import { useTradingStore } from "../../store/tradingViewStore";
-import { setTradingAccount } from "../../../api/trading-accounts/actions";
+import { setTradingAccount } from "@/app/api/trading";
 
 export function AccountSwitcher() {
   const [open, setOpen] = useState(false);
