@@ -13,130 +13,54 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout Repository
+      - name: 📥 Checkout Code
         uses: actions/checkout@v4
-        
-      - name: Setup Node.js
+
+      - name: 🧰 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          
-      - name: Install pnpm
+          node-version: ${{ env.NODE_VERSION }} 
+
+      - name: 📦 Install Dependencies & Build
         run: |
-          corepack enable
-          corepack prepare pnpm@latest --activate
-          
-      - name: Install Dependencies and Build
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
-          
-      - name: Setup SSH
+          npm install
+          npm run build
+
+          APP_NAME_LOWER=$(echo "${{ env.APP_NAME }}" | tr '[:upper:]' '[:lower:]')
+          DEPLOY_PATH="/www/wwwroot/${APP_NAME_LOWER}.crm-system.com"
+          echo "DEPLOY_PATH=${DEPLOY_PATH}" >> $GITHUB_ENV
+
+      - name: 🔐 Setup SSH Access
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-          
-      - name: Deploy Files
+
+      - name: 🚀 Deploy via SSH
         run: |
-          APP_NAME_LOWER=$(echo "${{ env.APP_NAME }}" | tr '[:upper:]' '[:lower:]')
-          DEPLOY_PATH="/www/wwwroot/${APP_NAME_LOWER}.crm-system.com"
-          
-          # First, fix permissions on remote server
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'PERM_EOF'
-            cd ${{ env.DEPLOY_PATH }}
-            # Remove problematic files that can't be deleted
-            sudo rm -f .user.ini .htaccess
-            # Set proper ownership before rsync
-            sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} .
-            sudo chmod -R 755 .
-          PERM_EOF
-          
-          # Now sync files with proper exclusions
           rsync -avz --delete \
             --exclude='.git' \
             --exclude='node_modules' \
-            --exclude='.env.local' \
+            --exclude='.env.*' \
             --exclude='.github' \
-            --exclude='.user.ini' \
-            --exclude='.htaccess' \
-            --exclude='*.log' \
-            --filter='P .user.ini' \
-            --filter='P .htaccess' \
-            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/
-          
-      - name: Start Application
-        run: |
-          APP_NAME_LOWER=$(echo "${{ env.APP_NAME }}" | tr '[:upper:]' '[:lower:]')
-          DEPLOY_PATH="/www/wwwroot/${APP_NAME_LOWER}.crm-system.com"
-          
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ env.DEPLOY_PATH }}/
+
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
             cd ${{ env.DEPLOY_PATH }}
-            
-            # Install npm if not exists
-            if ! command -v npm &> /dev/null; then
-              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-              sudo apt-get install -y nodejs
-            fi
-            
-            # Install pm2 globally if not exists
-            if ! command -v pm2 &> /dev/null; then
-              sudo npm install -g pm2
-            fi
-            
-            # Install production dependencies
             npm install --omit=dev
-            
-            # Set final permissions for web server
-            sudo chown -R www:www .
-            sudo find . -type f -exec chmod 644 {} \;
-            sudo find . -type d -exec chmod 755 {} \;
-            sudo chmod +x node_modules/.bin/* 2>/dev/null || true
-            
-            # Create ecosystem file for PM2
-            cat > ecosystem.config.js << 'ECOSYSTEM_EOF'
-            module.exports = {
-              apps: [{
-                name: '${{ env.APP_NAME }}',
-                script: 'npm',
-                args: 'start',
-                cwd: '${{ env.DEPLOY_PATH }}',
-                env: {
-                  NODE_ENV: 'production',
-                  PORT: ${{ env.PORT }}
-                },
-                instances: 1,
-                autorestart: true,
-                watch: false,
-                max_memory_restart: '1G',
-                error_file: './logs/err.log',
-                out_file: './logs/out.log',
-                log_file: './logs/combined.log'
-              }]
-            };
-            ECOSYSTEM_EOF
-            
-            # Create logs directory
-            mkdir -p logs
-            
-            # Start/restart with PM2
-            pm2 startOrRestart ecosystem.config.js --env production
-            
-            # Save PM2 process list
-            pm2 save
-            
-            # Setup PM2 startup (only if not already configured)
-            if ! pm2 startup | grep -q "already configured"; then
-              pm2 startup | tail -n 1 | sudo bash 2>/dev/null || true
-            fi
-            
-            echo "✅ Application deployed and running on port ${{ env.PORT }}"
-            pm2 status
-          EOF
-          
-      - name: Cleanup
+
+            cat > start-app.sh << 'EOT'
+            #!/bin/bash
+            cd $(dirname "$0")
+            exec npx next start -p ${{ env.PORT }}
+            EOT
+
+            chmod +x start-app.sh
+            EOF
+
+      - name: 🧹 Cleanup SSH Keys
         if: always()
-        run: rm -rf ~/.ssh/id_rsa
+        run: rm -rf ~/.ssh
