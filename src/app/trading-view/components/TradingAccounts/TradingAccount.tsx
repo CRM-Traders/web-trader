@@ -12,32 +12,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Wallet, Plus, Loader2, Check } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useTradingStore } from "../../store/tradingViewStore";
 import {
   fetchTradingAccounts,
   createTradingAccount,
   setTradingAccount,
-} from "@/app/api/trading-accounts/actions";
-import { useTradingStore } from "../../store/tradingViewStore";
-
-interface TradingAccount {
-  id: string;
-  displayName: string;
-  balance?: number;
-  currency?: string;
-  createdAt?: string;
-  isActive?: boolean;
-}
+} from "@/app/api/trading";
+import type {
+  TradingAccountDto,
+  CreateTradingAccountRequest,
+  TradingAccount,
+} from "@/app/api/types/trading";
 
 interface TradingAccountModalProps {
-  allowSkip?: boolean; // Allow users to skip if they already have a selected account
-  onAccountSelected?: () => void; // Callback when account is selected
+  allowSkip?: boolean;
+  onAccountSelected?: () => void;
 }
 
 export function TradingAccountModal({
   allowSkip = false,
   onAccountSelected,
 }: TradingAccountModalProps) {
-  const [accounts, setAccounts] = useState<TradingAccount[]>([]);
+  const [accounts, setAccounts] = useState<TradingAccountDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [selecting, setSelecting] = useState<string | null>(null);
@@ -52,85 +48,83 @@ export function TradingAccountModal({
   }, []);
 
   const fetchAccounts = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      const result = await fetchTradingAccounts();
+    const result = await fetchTradingAccounts();
 
-      if (result.success) {
-        setAccounts(result.data || []);
-      } else {
-        setError(result.error || "Failed to load trading accounts");
-        setAccounts([]);
-      }
-    } catch (error) {
-      console.error("Error fetching trading accounts:", error);
-      setError("Failed to load trading accounts");
+    if (result.success) {
+      setAccounts(result.data || []);
+    } else {
       setAccounts([]);
-    } finally {
-      setLoading(false);
     }
+
+    setLoading(false);
   };
 
   const handleCreateAccount = async () => {
     if (!newAccountName.trim()) return;
 
-    try {
-      setCreating(true);
-      setError(null);
+    setCreating(true);
+    setError(null);
 
-      const result = await createTradingAccount({
-        displayName: newAccountName.trim(),
-      });
+    const request: CreateTradingAccountRequest = {
+      displayName: newAccountName.trim(),
+    };
 
-      if (result.success) {
-        setNewAccountName("");
-        setShowCreateForm(false);
-        await fetchAccounts(); // Refresh the list
-      } else {
-        setError(result.error || "Failed to create trading account");
-      }
-    } catch (error) {
-      console.error("Error creating trading account:", error);
-      setError("Failed to create trading account");
-    } finally {
-      setCreating(false);
+    const result = await createTradingAccount(request);
+
+    if (result.success) {
+      setNewAccountName("");
+      setShowCreateForm(false);
+      await fetchAccounts(); // Refresh the list
+    } else {
     }
+
+    setCreating(false);
   };
 
-  const handleSelectAccount = async (account: TradingAccount) => {
-    try {
-      setSelecting(account.id);
-      setError(null);
+  const handleSelectAccount = async (account: TradingAccountDto) => {
+    setSelecting(account.id);
+    setError(null);
 
-      // Call the server action to set the trading account
-      const result = await setTradingAccount(account.id);
+    const result = await setTradingAccount(account.id);
 
-      if (result.success) {
-        // Transform the account data to match the store's TradingAccount interface
-        const tradingAccount = {
-          id: account.id,
-          name: account.displayName,
-          wallets: [], // This will be populated when wallet data is loaded
-        };
+    if (result.success) {
+      // Transform the account data to match the store's TradingAccount interface
+      const tradingAccount: TradingAccount = {
+        id: account.id,
+        name: account.displayName,
+        wallets: [], // This will be populated when wallet data is loaded
+      };
 
-        setSelectedAccount(tradingAccount);
+      setSelectedAccount(tradingAccount);
 
-        // Call the callback if provided
-        if (onAccountSelected) {
-          onAccountSelected();
-        }
-      } else {
-        setError(result.error || "Failed to select trading account");
-      }
-    } catch (error) {
-      console.error("Error selecting trading account:", error);
-      setError("Failed to select trading account");
-    } finally {
-      setSelecting(null);
+      // Call the callback if provided
+      onAccountSelected?.();
+    } else {
     }
+
+    setSelecting(null);
   };
+
+  const resetCreateForm = () => {
+    setShowCreateForm(false);
+    setNewAccountName("");
+    setError(null);
+  };
+
+  const getAccountStatus = (account: TradingAccountDto) => {
+    if (account.status === "Active")
+      return { text: "Active", color: "text-green-600" };
+    if (account.status === "Suspended")
+      return { text: "Suspended", color: "text-red-600" };
+    return { text: account.status, color: "text-gray-500" };
+  };
+
+  const isCurrentlySelected = (accountId: string) =>
+    selectedAccount?.id === accountId;
+  const isBeingSelected = (accountId: string) => selecting === accountId;
 
   if (loading) {
     return (
@@ -142,14 +136,23 @@ export function TradingAccountModal({
     );
   }
 
-  if (error) {
+  if (error && accounts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] space-y-4">
         <Wallet className="h-16 w-16 text-red-500" />
         <h2 className="text-2xl font-semibold text-red-600">Error</h2>
         <p className="text-muted-foreground text-center">{error}</p>
-        <Button onClick={fetchAccounts}>Try Again</Button>
-        <Button onClick={() => window.location.href = "https://online.salesvault.dev/login"}>Go to Login</Button>
+        <div className="flex gap-2">
+          <Button onClick={fetchAccounts}>Try Again</Button>
+          <Button
+            variant="outline"
+            // onClick={() =>
+            //   (window.location.href = "https://online.salesvault.dev/login")
+            // }
+          >
+            Go to Login
+          </Button>
+        </div>
       </div>
     );
   }
@@ -172,6 +175,7 @@ export function TradingAccountModal({
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Select Trading Account</h2>
@@ -192,6 +196,14 @@ export function TradingAccountModal({
         </div>
       </div>
 
+      {/* Error Display */}
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-red-600 text-sm">{error}</p>
+        </div>
+      )}
+
+      {/* Create Account Form */}
       {showCreateForm && (
         <Card>
           <CardHeader>
@@ -209,6 +221,11 @@ export function TradingAccountModal({
                 value={newAccountName}
                 onChange={(e) => setNewAccountName(e.target.value)}
                 disabled={creating}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newAccountName.trim()) {
+                    handleCreateAccount();
+                  }
+                }}
               />
             </div>
             <div className="flex space-x-2">
@@ -221,11 +238,7 @@ export function TradingAccountModal({
               </Button>
               <Button
                 variant="outline"
-                onClick={() => {
-                  setShowCreateForm(false);
-                  setNewAccountName("");
-                  setError(null);
-                }}
+                onClick={resetCreateForm}
                 disabled={creating}
               >
                 Cancel
@@ -235,94 +248,105 @@ export function TradingAccountModal({
         </Card>
       )}
 
+      {/* Accounts List */}
       {accounts.length > 0 && (
         <div className="space-y-4">
           <h3 className="text-lg font-medium">Available Accounts</h3>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {accounts.map((account) => {
-              const isCurrentlySelected = selectedAccount?.id === account.id;
-              const isBeingSelected = selecting === account.id;
+              const currentlySelected = isCurrentlySelected(account.id);
+              const beingSelected = isBeingSelected(account.id);
+              const status = getAccountStatus(account);
 
               return (
                 <Card
                   key={account.id}
                   className={`cursor-pointer transition-all duration-200 ${
-                    isBeingSelected
+                    beingSelected
                       ? "opacity-50 pointer-events-none"
-                      : isCurrentlySelected
+                      : currentlySelected
                       ? "border-green-500 bg-green-50/50 dark:bg-green-950/20"
                       : "hover:shadow-md hover:border-blue-500"
                   }`}
-                  onClick={() =>
-                    !isBeingSelected && handleSelectAccount(account)
-                  }
+                  onClick={() => !beingSelected && handleSelectAccount(account)}
                 >
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
                       <span className="truncate">{account.displayName}</span>
                       <div className="flex items-center gap-2">
-                        {isBeingSelected && (
+                        {beingSelected && (
                           <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                         )}
-                        {isCurrentlySelected && (
+                        {currentlySelected && (
                           <Check className="h-4 w-4 text-green-500" />
                         )}
                         <Wallet className="h-5 w-5 text-muted-foreground" />
                       </div>
                     </CardTitle>
-                    <CardDescription>ID: {account.id}</CardDescription>
+                    <CardDescription>
+                      Account: {account.accountNumber}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      {account.balance !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          Initial Balance:
+                        </span>
+                        <span className="font-medium">
+                          ${account.initialBalance.toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          Type:
+                        </span>
+                        <span className="text-sm">{account.accountType}</span>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          Status:
+                        </span>
+                        <span className={`text-sm font-medium ${status.color}`}>
+                          {status.text}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          Created:
+                        </span>
+                        <span className="text-sm">
+                          {new Date(account.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      {account.verifiedAt && (
                         <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">
-                            Balance:
+                            Verified:
                           </span>
-                          <span className="font-medium">
-                            {account.balance} {account.currency || "USD"}
+                          <span className="text-sm text-green-600">
+                            {new Date(account.verifiedAt).toLocaleDateString()}
                           </span>
                         </div>
                       )}
-                      {account.createdAt && (
-                        <div className="flex justify-between">
-                          <span className="text-sm text-muted-foreground">
-                            Created:
-                          </span>
-                          <span className="text-sm">
-                            {new Date(account.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      )}
-                      {account.isActive !== undefined && (
-                        <div className="flex justify-between">
-                          <span className="text-sm text-muted-foreground">
-                            Status:
-                          </span>
-                          <span
-                            className={`text-sm font-medium ${
-                              account.isActive
-                                ? "text-green-600"
-                                : "text-gray-500"
-                            }`}
-                          >
-                            {account.isActive ? "Active" : "Inactive"}
-                          </span>
-                        </div>
-                      )}
+
                       <div className="pt-2 border-t">
                         <p
                           className={`text-xs font-medium ${
-                            isBeingSelected
+                            beingSelected
                               ? "text-blue-600"
-                              : isCurrentlySelected
+                              : currentlySelected
                               ? "text-green-600"
                               : "text-blue-600"
                           }`}
                         >
-                          {isBeingSelected
+                          {beingSelected
                             ? "Selecting account..."
-                            : isCurrentlySelected
+                            : currentlySelected
                             ? "Currently selected"
                             : "Click to select this account"}
                         </p>

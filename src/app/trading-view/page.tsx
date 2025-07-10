@@ -17,7 +17,11 @@ import {
   ArrowLeftRight,
 } from "lucide-react";
 import { useTradingWebSocket } from "./hooks/useTradingWebSocket";
-import { useHasHydrated, useTradingStore, clearAllTradingStoreData } from "./store/tradingViewStore";
+import {
+  useHasHydrated,
+  useTradingStore,
+  clearAllTradingStoreData,
+} from "./store/tradingViewStore";
 import { MarketSelector } from "./components/MarketSelector/MarketSelector";
 import { MarketStats } from "./components/MarketStats/MarketStats";
 import { TradingChart } from "./components/TradingChart/TradingChart";
@@ -27,12 +31,14 @@ import { OrderBook } from "./components/OrderBook/OrderBook";
 import { TradePanel } from "./components/TradePanel/TradePanel";
 import { WalletBalance } from "./components/WalletBalance/WalletBalance";
 import { ChartSettingsPanel } from "./components/ChartSettingsPanel/ChartSettingsPanel";
-import { getUserInfo, isAuthenticated, logout } from "../api/confirm-auth/auth";
-import { postConfirmAuth } from "../api/confirm-auth/postConfirmAuth";
 import { TradingAccountModal } from "./components/TradingAccounts/TradingAccount";
-import { AccountSwitcher } from "./components/AccountSwitcher/AccountSwitcher";
-import { fetchTradingAccounts } from "../api/trading-accounts/actions";
-import Error from "next/error";
+import {
+  getUserInfo,
+  isAuthenticated,
+  logout,
+  postConfirmAuth,
+} from "../api/auth";
+import { fetchTradingAccounts } from "../api/trading";
 
 // Authentication loading component
 function AuthenticationLoader() {
@@ -79,52 +85,54 @@ function AuthenticationLoader() {
 }
 
 // Authentication error component
-function AuthenticationError({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-      <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
-      </div>
+// function AuthenticationError({ onRetry }: { onRetry: () => void }) {
+//   return (
+//     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+//       <div className="absolute inset-0">
+//         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
+//       </div>
 
-      <div className="relative z-10 text-center space-y-6 max-w-md mx-auto px-6">
-        <div className="flex items-center justify-center mb-6">
-          <div className="w-16 h-16 bg-red-500/20 rounded-xl flex items-center justify-center">
-            <AlertCircle className="w-8 h-8 text-red-400" />
-          </div>
-        </div>
+//       <div className="relative z-10 text-center space-y-6 max-w-md mx-auto px-6">
+//         <div className="flex items-center justify-center mb-6">
+//           <div className="w-16 h-16 bg-red-500/20 rounded-xl flex items-center justify-center">
+//             <AlertCircle className="w-8 h-8 text-red-400" />
+//           </div>
+//         </div>
 
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold text-white">Access Denied</h1>
-          <p className="text-slate-400">Unable to verify your authentication</p>
-        </div>
+//         <div className="space-y-2">
+//           <h1 className="text-2xl font-bold text-white">Access Denied</h1>
+//           <p className="text-slate-400">Unable to verify your authentication</p>
+//         </div>
 
-        <div className="space-y-4">
-          <p className="text-slate-300 text-sm">
-            Your session may have expired or the authentication token is
-            invalid.
-          </p>
+//         <div className="space-y-4">
+//           <p className="text-slate-300 text-sm">
+//             Your session may have expired or the authentication token is
+//             invalid.
+//           </p>
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button
-              onClick={onRetry}
-              variant="outline"
-              className="bg-slate-700/50 border-slate-600 text-slate-200 hover:bg-slate-700"
-            >
-              Try Again
-            </Button>
-            <Button
-              onClick={() => window.location.href = "https://online.salesvault.dev/login"}
-              variant="outline"
-              className="bg-slate-700/50 border-slate-600 text-slate-200 hover:bg-slate-700"
-            >
-              Go to Login
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+//           <div className="flex flex-col sm:flex-row gap-3 justify-center">
+//             <Button
+//               onClick={onRetry}
+//               variant="outline"
+//               className="bg-slate-700/50 border-slate-600 text-slate-200 hover:bg-slate-700"
+//             >
+//               Try Again
+//             </Button>
+//             <Button
+//               onClick={() =>
+//                 (window.location.href = "https://online.salesvault.dev/login")
+//               }
+//               variant="outline"
+//               className="bg-slate-700/50 border-slate-600 text-slate-200 hover:bg-slate-700"
+//             >
+//               Go to Login
+//             </Button>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
 
 // Loading fallback component
 function LoadingFallback() {
@@ -182,22 +190,22 @@ function SpotTradingContent() {
       if (!ctx && isAuthenticated()) {
         setAuthStatus("authenticated");
         setUserInfo(getUserInfo());
-        
+
         // Clear the store to ensure we don't load old data
         clearAllTradingStoreData();
         resetStore();
         return;
       }
 
-      if (!ctx) {
-        window.location.href = "https://online.salesvault.dev/login";
-        // No ctx parameter and not authenticated, redirect to sign-in
-        return;
-      }
+      // if (!ctx) {
+      //   window.location.href = "https://online.salesvault.dev/login";
+      //   // No ctx parameter and not authenticated, redirect to sign-in
+      //   return;
+      // }
 
       try {
         setAuthStatus("loading");
-        const authResult = await postConfirmAuth(ctx);
+        const authResult = await postConfirmAuth(ctx!);
         console.log("Authentication result:", authResult);
 
         if (authResult) {
@@ -349,9 +357,9 @@ function SpotTradingContent() {
   }
 
   // Show authentication error
-  if (authStatus === "error") {
-    return <AuthenticationError onRetry={handleAuthRetry} />;
-  }
+  // if (authStatus === "error") {
+  //   return <AuthenticationError onRetry={handleAuthRetry} />;
+  // }
 
   // Show loading if store hasn't hydrated yet
   if (!hasHydrated) {
