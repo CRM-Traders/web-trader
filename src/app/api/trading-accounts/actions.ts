@@ -274,7 +274,6 @@ export const fetchWalletBalances = async (
   }
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const placeLimitOrder = async (
   orderRequest: LimitOrderRequest
 ): Promise<ApiResponse<any>> => {
@@ -342,7 +341,6 @@ export const placeLimitOrder = async (
     };
   }
 };
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const placeMarketOrder = async (
   orderRequest: MarketOrderRequest
 ): Promise<ApiResponse<any>> => {

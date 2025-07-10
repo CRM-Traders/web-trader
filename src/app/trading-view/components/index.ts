@@ -8,5 +8,3 @@ export { loadTradingViewScript } from "@/app/trading-view/utils/script-loader";
 // Component exports
 export { AccountSwitcher } from "./AccountSwitcher/AccountSwitcher";
 export { TradingAccountModal } from "./TradingAccounts/TradingAccount";
-export { TicketModal } from "./TicketModal/TicketModal";
-export { TicketHistory } from "./TicketHistory/TicketHistory";
