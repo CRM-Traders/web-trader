@@ -112,6 +112,13 @@ function AuthenticationError({ onRetry }: { onRetry: () => void }) {
             >
               Try Again
             </Button>
+            <Button
+              onClick={() => window.location.href = "https://online.salesvault.dev/login"}
+              variant="outline"
+              className="bg-slate-700/50 border-slate-600 text-slate-200 hover:bg-slate-700"
+            >
+              Go to Login
+            </Button>
           </div>
         </div>
       </div>
@@ -178,7 +185,7 @@ function SpotTradingContent() {
       }
 
       if (!ctx) {
-        window.location.href = "https://online.salesvault.dev/auth/login";
+        window.location.href = "https://online.salesvault.dev/login";
         // No ctx parameter and not authenticated, redirect to sign-in
         return;
       }
@@ -395,7 +402,7 @@ function SpotTradingContent() {
   const quoteWallet = walletBalances.find((w) => w.currency === quoteCurrency);
 
   return (
-    <div className="h-[calc(100vh-120px)] flex flex-col p-4">
+    <div className="h-[calc(100vh-120px)] flex flex-col p-4 mb-4">
       {/* Market Header */}
       <div className="flex items-center justify-between mb-4">
         <MarketSelector />
@@ -461,7 +468,7 @@ function SpotTradingContent() {
 
           {/* Orders */}
           <Card className="h-[calc(100%-32.2rem)]">
-            <Tabs defaultValue="openOrders" className="h-full">
+            <Tabs defaultValue="openOrders" className="h-full mx-3">
               <TabsList className="w-full justify-start">
                 <TabsTrigger value="openOrders">Open Orders</TabsTrigger>
                 <TabsTrigger value="orderHistory">Order History</TabsTrigger>

@@ -9,6 +9,30 @@ import { useTradingStore } from "@/app/trading-view/store/tradingViewStore";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+// Helper function to convert status number to string
+const statusToString = (status: number): string => {
+  switch (status) {
+    case 1: return "PENDING";
+    case 2: return "PARTIALLY_FILLED";
+    case 3: return "FILLED";
+    case 4: return "CANCELLED";
+    case 5: return "REJECTED";
+    default: return "UNKNOWN";
+  }
+};
+
+// Helper function to get status styling
+const getStatusStyle = (status: number): string => {
+  switch (status) {
+    case 3: return "bg-green-100 text-green-800"; // FILLED
+    case 1: return "bg-blue-100 text-blue-800"; // PENDING
+    case 2: return "bg-yellow-100 text-yellow-800"; // PARTIALLY_FILLED
+    case 4: return "bg-red-100 text-red-800"; // CANCELLED
+    case 5: return "bg-red-100 text-red-800"; // REJECTED
+    default: return "bg-gray-100 text-gray-800";
+  }
+};
+
 interface TradePanelProps {
   baseBalance: number;
   quoteBalance: number;
@@ -189,33 +213,33 @@ export function TradePanel({
         return;
       }
 
-      if (orderType === "limit") {
-        if (side === "buy") {
-          const requiredQuote =
-            Number.parseFloat(price) * Number.parseFloat(amount);
-          if (requiredQuote > quoteBalance) {
-            toast.error(`Insufficient ${quoteCurrency} balance`);
-            return;
-          }
-        } else {
-          if (Number.parseFloat(amount) > baseBalance) {
-            toast.error(`Insufficient ${baseCurrency} balance`);
-            return;
-          }
-        }
-      } else {
-        if (side === "buy") {
-          if (Number.parseFloat(amount) > quoteBalance) {
-            toast.error(`Insufficient ${quoteCurrency} balance`);
-            return;
-          }
-        } else {
-          if (Number.parseFloat(amount) > baseBalance) {
-            toast.error(`Insufficient ${baseCurrency} balance`);
-            return;
-          }
-        }
-      }
+      // if (orderType === "limit") {
+      //   if (side === "buy") {
+      //     const requiredQuote =
+      //       Number.parseFloat(price) * Number.parseFloat(amount);
+      //     if (requiredQuote > quoteBalance) {
+      //       toast.error(`Insufficient ${quoteCurrency} balance`);
+      //       return;
+      //     }
+      //   } else {
+      //     if (Number.parseFloat(amount) > baseBalance) {
+      //       toast.error(`Insufficient ${baseCurrency} balance`);
+      //       return;
+      //     }
+      //   }
+      // } else {
+      //   if (side === "buy") {
+      //     if (Number.parseFloat(amount) > quoteBalance) {
+      //       toast.error(`Insufficient ${quoteCurrency} balance`);
+      //       return;
+      //     }
+      //   } else {
+      //     if (Number.parseFloat(amount) > baseBalance) {
+      //       toast.error(`Insufficient ${baseCurrency} balance`);
+      //       return;
+      //     }
+      //   }
+      // }
 
       await placeOrder({
         symbol: selectedSymbol,
@@ -463,115 +487,6 @@ export function TradePanel({
               `${side === "buy" ? "Buy" : "Sell"} ${baseCurrency}`
             )}
           </Button>
-
-          {/* Recent Orders Section */}
-          <div className="mt-4 pt-4 border-t">
-            <div className="text-sm font-medium mb-2">Recent Orders</div>
-            <Tabs defaultValue="limit" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="limit" className="text-xs">
-                  Limit ({limitOrders.length})
-                </TabsTrigger>
-                <TabsTrigger value="market" className="text-xs">
-                  Market ({marketOrders.length})
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent
-                value="limit"
-                className="space-y-1 max-h-32 overflow-y-auto"
-              >
-                {limitOrders.length === 0 ? (
-                  <div className="text-xs text-muted-foreground text-center py-2">
-                    No limit orders
-                  </div>
-                ) : (
-                  limitOrders.slice(0, 5).map((order) => (
-                    <div
-                      key={order.id}
-                      className="flex justify-between items-center text-xs p-2 bg-muted rounded"
-                    >
-                      <div className="flex flex-col">
-                        <span
-                          className={
-                            order.side === "BUY"
-                              ? "text-green-600"
-                              : "text-red-600"
-                          }
-                        >
-                          {order.side} {order.quantity}
-                        </span>
-                        <span className="text-muted-foreground">
-                          @ {order.price} {quoteCurrency}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <div
-                          className={`text-xs px-1 py-0.5 rounded ${
-                            order.status === "FILLED"
-                              ? "bg-green-100 text-green-800"
-                              : order.status === "OPEN"
-                              ? "bg-blue-100 text-blue-800"
-                              : order.status === "CANCELLED"
-                              ? "bg-red-100 text-red-800"
-                              : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {order.status}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </TabsContent>
-              <TabsContent
-                value="market"
-                className="space-y-1 max-h-32 overflow-y-auto"
-              >
-                {marketOrders.length === 0 ? (
-                  <div className="text-xs text-muted-foreground text-center py-2">
-                    No market orders
-                  </div>
-                ) : (
-                  marketOrders.slice(0, 5).map((order) => (
-                    <div
-                      key={order.id}
-                      className="flex justify-between items-center text-xs p-2 bg-muted rounded"
-                    >
-                      <div className="flex flex-col">
-                        <span
-                          className={
-                            order.side === "BUY"
-                              ? "text-green-600"
-                              : "text-red-600"
-                          }
-                        >
-                          {order.side} {order.quantity}
-                        </span>
-                        <span className="text-muted-foreground">
-                          Market Order
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <div
-                          className={`text-xs px-1 py-0.5 rounded ${
-                            order.status === "FILLED"
-                              ? "bg-green-100 text-green-800"
-                              : order.status === "OPEN"
-                              ? "bg-blue-100 text-blue-800"
-                              : order.status === "CANCELLED"
-                              ? "bg-red-100 text-red-800"
-                              : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {order.status}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </TabsContent>
-            </Tabs>
-          </div>
         </div>
       </Tabs>
     </div>

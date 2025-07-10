@@ -28,26 +28,28 @@ interface WalletBalance {
 interface LimitOrderRequest {
   tradingAccountId: string;
   symbol: string;
-  side: number; // 1 for BUY, -1 for SELL
+  side: number; // 1 for BUY, 2 for SELL (matching C# OrderSide enum)
   quantity: number;
   price: number;
+  type: number; // 2 for LIMIT (matching C# OrderType enum)
 }
 
 interface MarketOrderRequest {
   tradingAccountId: string;
   symbol: string;
-  side: number; // 1 for BUY, -1 for SELL
+  side: number; // 1 for BUY, 2 for SELL (matching C# OrderSide enum)
   quantity: number;
+  type: number; // 1 for MARKET (matching C# OrderType enum)
 }
 
 interface Order {
   id: string;
   symbol: string;
-  side: number; // 1 for BUY, -1 for SELL
-  type: string; // "LIMIT" | "MARKET"
+  side: number; // 1 for BUY, 2 for SELL (matching C# OrderSide enum)
+  type: number; // 1 for MARKET, 2 for LIMIT (matching C# OrderType enum)
   price?: number;
   quantity: number;
-  status: string;
+  status: number; // 1=Pending, 2=PartiallyFilled, 3=Filled, 4=Cancelled, 5=Rejected (matching C# OrderStatus enum)
   createdAt: string;
   updatedAt?: string;
 }
@@ -255,6 +257,7 @@ export const fetchWalletBalances = async (
         success: true,
         data: Array.isArray(data) ? data : [],
       };
+
     } else {
       console.error("Failed to fetch wallet balances:", response.status);
       return {
@@ -277,7 +280,7 @@ export const placeLimitOrder = async (
 ): Promise<ApiResponse<any>> => {
   try {
     const { tradingAccountId, symbol, side, quantity, price } = orderRequest;
-
+    console.log("placeLimitOrder", orderRequest);
     if (
       !tradingAccountId ||
       !symbol ||
@@ -290,6 +293,12 @@ export const placeLimitOrder = async (
         error: "Missing required fields",
       };
     }
+
+    // Add type field to the request
+    const limitOrderData = {
+      ...orderRequest,
+      type: 2 // LIMIT enum value
+    };
 
     const token = await getAccessToken();
     if (!token) {
@@ -307,21 +316,15 @@ export const placeLimitOrder = async (
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          tradingAccountId,
-          symbol,
-          side,
-          quantity,
-          price,
-        }),
+        body: JSON.stringify(limitOrderData),
       }
     );
 
     if (response.ok) {
-      const data = await response.json();
+      const orderId = await response.text(); // API returns UUID string
       return {
         success: true,
-        data,
+        data: { id: orderId, status: "OPEN" }, // Create a simple response object
       };
     } else {
       const errorData = await response.text();
@@ -344,14 +347,22 @@ export const placeMarketOrder = async (
   orderRequest: MarketOrderRequest
 ): Promise<ApiResponse<any>> => {
   try {
+    console.log("placeMarketOrder received:", orderRequest);
     const { tradingAccountId, symbol, side, quantity } = orderRequest;
 
     if (!tradingAccountId || !symbol || side === undefined || !quantity) {
+      console.log("Missing required fields for market order:", { tradingAccountId, symbol, side, quantity });
       return {
         success: false,
         error: "Missing required fields",
       };
     }
+
+    // Add type field to the request
+    const marketOrderData = {
+      ...orderRequest,
+      type: 1 // MARKET enum value
+    };
 
     const token = await getAccessToken();
     if (!token) {
@@ -361,6 +372,7 @@ export const placeMarketOrder = async (
       };
     }
 
+    console.log("Sending market order to API:", JSON.stringify(marketOrderData));
     const response = await fetch(
       `${process.env.BASE_TRADING_URL}/api/Trading/order/market`,
       {
@@ -369,20 +381,15 @@ export const placeMarketOrder = async (
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          tradingAccountId,
-          symbol,
-          side,
-          quantity,
-        }),
+        body: JSON.stringify(marketOrderData),
       }
     );
 
     if (response.ok) {
-      const data = await response.json();
+      const orderId = await response.text(); // API returns UUID string
       return {
         success: true,
-        data,
+        data: { id: orderId, status: "OPEN" }, // Create a simple response object
       };
     } else {
       const errorData = await response.text();
@@ -428,20 +435,14 @@ export const fetchOrders = async (
       };
     }
 
-    // Build query parameters
+    // Build query parameters - always include all parameters even if empty
     const params = new URLSearchParams({
       tradingAccountId: tradingAccountId,
       pageIndex: pageIndex.toString(),
       pageSize: pageSize.toString(),
+      status: status || "",
+      symbol: symbol || "",
     });
-
-    if (status) {
-      params.append("status", status);
-    }
-
-    if (symbol) {
-      params.append("symbol", symbol);
-    }
 
     const response = await fetch(
       `${process.env.BASE_TRADING_URL}/api/Trading/orders?${params.toString()}`,
@@ -453,12 +454,48 @@ export const fetchOrders = async (
         },
       }
     );
-
     if (response.ok) {
       const data = await response.json();
+      console.log("fetchOrders response", data);
+      
+      // Map API response to frontend format
+      const mapApiOrderToOrder = (apiOrder: any): Order => {
+        // Map orderType to type number
+        let type = 1; // Default MARKET
+        if (apiOrder.orderType === "Limit") type = 2;
+
+        // Map side to number (1=BUY, 2=SELL)
+        let side = 1; // Default BUY
+        if (apiOrder.side === "Sell" || apiOrder.side === 2) side = 2;
+
+        // Map status string to number
+        let status = 1; // Default Pending
+        switch (apiOrder.status) {
+          case "Pending": status = 1; break;
+          case "PartiallyFilled": status = 2; break;
+          case "Filled": status = 3; break;
+          case "Cancelled": status = 4; break;
+          case "Rejected": status = 5; break;
+          default: status = 1;
+        }
+
+        return {
+          id: apiOrder.id,
+          symbol: apiOrder.tradingPairSymbol,
+          side,
+          type,
+          price: apiOrder.price,
+          quantity: apiOrder.quantity,
+          status,
+          createdAt: apiOrder.createdAt,
+        };
+      };
+
+      const orders = (data.items || data.orders || data || []).map(mapApiOrderToOrder);
+      
       return {
         success: true,
-        data: Array.isArray(data) ? data : data.orders || [],
+        data: orders,
       };
     } else {
       const errorData = await response.text();
@@ -504,21 +541,14 @@ export const fetchLimitOrders = async (
       };
     }
 
-    // Build query parameters for limit orders
+    // Build query parameters for limit orders - always include all parameters even if empty
     const params = new URLSearchParams({
       tradingAccountId: tradingAccountId,
       pageIndex: pageIndex.toString(),
       pageSize: pageSize.toString(),
-      type: "LIMIT",
+      status: status || "",
+      symbol: symbol || "",
     });
-
-    if (status) {
-      params.append("status", status);
-    }
-
-    if (symbol) {
-      params.append("symbol", symbol);
-    }
 
     const response = await fetch(
       `${process.env.BASE_TRADING_URL}/api/Trading/orders?${params.toString()}`,
@@ -533,10 +563,44 @@ export const fetchLimitOrders = async (
 
     if (response.ok) {
       const data = await response.json();
-      const orders = Array.isArray(data) ? data : data.orders || [];
+      
+      // Map API response to frontend format
+      const mapApiOrderToOrder = (apiOrder: any): Order => {
+        // Map orderType to type number
+        let type = 1; // Default MARKET
+        if (apiOrder.orderType === "Limit") type = 2;
+
+        // Map side to number (1=BUY, 2=SELL)
+        let side = 1; // Default BUY
+        if (apiOrder.side === "Sell" || apiOrder.side === 2) side = 2;
+
+        // Map status string to number
+        let status = 1; // Default Pending
+        switch (apiOrder.status) {
+          case "Pending": status = 1; break;
+          case "PartiallyFilled": status = 2; break;
+          case "Filled": status = 3; break;
+          case "Cancelled": status = 4; break;
+          case "Rejected": status = 5; break;
+          default: status = 1;
+        }
+
+        return {
+          id: apiOrder.id,
+          symbol: apiOrder.tradingPairSymbol,
+          side,
+          type,
+          price: apiOrder.price,
+          quantity: apiOrder.quantity,
+          status,
+          createdAt: apiOrder.createdAt,
+        };
+      };
+
+      const orders = (data.items || data.orders || data || []).map(mapApiOrderToOrder);
       // Filter for limit orders on client side as backup
       const limitOrders = orders.filter(
-        (order: Order) => order.type === "LIMIT"
+        (order: Order) => order.type === 2 // LIMIT enum value
       );
       return {
         success: true,
@@ -586,22 +650,14 @@ export const fetchMarketOrders = async (
       };
     }
 
-    // Build query parameters for market orders
+    // Build query parameters for market orders - always include all parameters even if empty
     const params = new URLSearchParams({
       tradingAccountId: tradingAccountId,
       pageIndex: pageIndex.toString(),
-      orderStatus: "",
       pageSize: pageSize.toString(),
-      type: "MARKET",
+      status: status || "",
+      symbol: symbol || "",
     });
-
-    if (status) {
-      params.append("status", status);
-    }
-
-    if (symbol) {
-      params.append("symbol", symbol);
-    }
 
     const response = await fetch(
       `${process.env.BASE_TRADING_URL}/api/Trading/orders?${params.toString()}`,
@@ -615,10 +671,44 @@ export const fetchMarketOrders = async (
     );
     if (response.ok) {
       const data = await response.json();
-      const orders = Array.isArray(data) ? data : data.orders || [];
+      
+      // Map API response to frontend format
+      const mapApiOrderToOrder = (apiOrder: any): Order => {
+        // Map orderType to type number
+        let type = 1; // Default MARKET
+        if (apiOrder.orderType === "Limit") type = 2;
+
+        // Map side to number (1=BUY, 2=SELL)
+        let side = 1; // Default BUY
+        if (apiOrder.side === "Sell" || apiOrder.side === 2) side = 2;
+
+        // Map status string to number
+        let status = 1; // Default Pending
+        switch (apiOrder.status) {
+          case "Pending": status = 1; break;
+          case "PartiallyFilled": status = 2; break;
+          case "Filled": status = 3; break;
+          case "Cancelled": status = 4; break;
+          case "Rejected": status = 5; break;
+          default: status = 1;
+        }
+
+        return {
+          id: apiOrder.id,
+          symbol: apiOrder.tradingPairSymbol,
+          side,
+          type,
+          price: apiOrder.price,
+          quantity: apiOrder.quantity,
+          status,
+          createdAt: apiOrder.createdAt,
+        };
+      };
+
+      const orders = (data.items || data.orders || data || []).map(mapApiOrderToOrder);
       // Filter for market orders on client side as backup
       const marketOrders = orders.filter(
-        (order: Order) => order.type === "MARKET"
+        (order: Order) => order.type === 1 // MARKET enum value
       );
       return {
         success: true,
@@ -637,221 +727,6 @@ export const fetchMarketOrders = async (
     return {
       success: false,
       error: "Failed to fetch market orders",
-    };
-  }
-};
-
-// Ticket-related interfaces
-interface TicketDto {
-  id: string;
-  tradingAccountId: string;
-  type: number; // 0 for Deposit, 1 for Withdraw
-  status: number; // 0-5 for different statuses
-  amount: number;
-  currency: string;
-  description?: string;
-  createdAt: string;
-  updatedAt?: string;
-}
-
-interface CreateTicketCommand {
-  walletId: string;
-  type: number; // 0 for Deposit, 1 for Withdraw
-  amount: number;
-}
-
-// Ticket API actions
-export const createTicket = async (
-  command: CreateTicketCommand
-): Promise<ApiResponse<string>> => {
-  try {
-    const token = await getAccessToken();
-    if (!token) {
-      return {
-        success: false,
-        error: "Authentication required",
-      };
-    }
-
-    const response = await fetch(
-      `${process.env.BASE_TRADING_URL}/traiding/api/Ticket/create`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(command),
-      }
-    );
-
-    if (response.ok) {
-      const ticketId = await response.text();
-      return {
-        success: true,
-        data: ticketId,
-      };
-    } else {
-      const errorData = await response.json().catch(() => ({}));
-      return {
-        success: false,
-        error: errorData.message || "Failed to create ticket",
-      };
-    }
-  } catch (error) {
-    console.error("Error creating ticket:", error);
-    return {
-      success: false,
-      error: "Failed to create ticket",
-    };
-  }
-};
-
-export const fetchTickets = async (
-  tradingAccountId: string,
-  pageIndex: number = 1,
-  pageSize: number = 50
-): Promise<ApiResponse<TicketDto[]>> => {
-  try {
-    const token = await getAccessToken();
-    if (!token) {
-      return {
-        success: false,
-        error: "Authentication required",
-      };
-    }
-
-    const params = new URLSearchParams({
-      TradingAccountId: tradingAccountId,
-      PageIndex: pageIndex.toString(),
-      PageSize: pageSize.toString(),
-    });
-
-    const response = await fetch(
-      `${process.env.BASE_TRADING_URL}/api/Ticket/tickets?${params}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      return {
-        success: true,
-        data: Array.isArray(data) ? data : [],
-      };
-    } else {
-      console.error("Failed to fetch tickets:", response.status);
-      return {
-        success: false,
-        error: `Failed to fetch tickets: ${response.status}`,
-      };
-    }
-  } catch (error) {
-    console.error("Error fetching tickets:", error);
-    return {
-      success: false,
-      error: "Failed to load tickets",
-    };
-  }
-};
-
-export const fetchTicketById = async (
-  ticketId: string
-): Promise<ApiResponse<TicketDto>> => {
-  try {
-    const token = await getAccessToken();
-    if (!token) {
-      return {
-        success: false,
-        error: "Authentication required",
-      };
-    }
-
-    const params = new URLSearchParams({
-      TicketId: ticketId,
-    });
-
-    const response = await fetch(
-      `${process.env.BASE_TRADING_URL}/api/Ticket/ticket-by-id?${params}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      return {
-        success: true,
-        data,
-      };
-    } else {
-      console.error("Failed to fetch ticket:", response.status);
-      return {
-        success: false,
-        error: `Failed to fetch ticket: ${response.status}`,
-      };
-    }
-  } catch (error) {
-    console.error("Error fetching ticket:", error);
-    return {
-      success: false,
-      error: "Failed to load ticket",
-    };
-  }
-};
-
-export const deleteTicket = async (
-  ticketId: string
-): Promise<ApiResponse<void>> => {
-  try {
-    const token = await getAccessToken();
-    if (!token) {
-      return {
-        success: false,
-        error: "Authentication required",
-      };
-    }
-
-    const params = new URLSearchParams({
-      TicketId: ticketId,
-    });
-
-    const response = await fetch(
-      `${process.env.BASE_TRADING_URL}/api/Ticket/delete?${params}`,
-      {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (response.ok) {
-      return {
-        success: true,
-      };
-    } else {
-      console.error("Failed to delete ticket:", response.status);
-      return {
-        success: false,
-        error: `Failed to delete ticket: ${response.status}`,
-      };
-    }
-  } catch (error) {
-    console.error("Error deleting ticket:", error);
-    return {
-      success: false,
-      error: "Failed to delete ticket",
     };
   }
 };

@@ -2,6 +2,30 @@
 
 import { useTradingStore } from "@/app/trading-view/store/tradingViewStore";
 
+// Helper function to convert status number to string
+const statusToString = (status: number): string => {
+  switch (status) {
+    case 1: return "PENDING";
+    case 2: return "PARTIALLY_FILLED";
+    case 3: return "FILLED";
+    case 4: return "CANCELLED";
+    case 5: return "REJECTED";
+    default: return "UNKNOWN";
+  }
+};
+
+// Helper function to get status styling
+const getStatusStyle = (status: number): string => {
+  switch (status) {
+    case 3: return "text-green-600"; // FILLED
+    case 1: return "text-blue-600"; // PENDING
+    case 2: return "text-yellow-600"; // PARTIALLY_FILLED
+    case 4: return "text-red-600"; // CANCELLED
+    case 5: return "text-red-600"; // REJECTED
+    default: return "text-gray-600";
+  }
+};
+
 interface OrderHistoryProps {
   type: "open" | "history" | "trades";
 }
@@ -16,6 +40,13 @@ export function OrderHistory({ type }: OrderHistoryProps) {
       : type === "history"
       ? orderHistory
       : tradeHistory;
+
+  console.log(`OrderHistory component - type: ${type}`, {
+    openOrders,
+    orderHistory,
+    tradeHistory,
+    selectedOrders: orders
+  });
 
   if (orders.length === 0) {
     return (
@@ -34,6 +65,7 @@ export function OrderHistory({ type }: OrderHistoryProps) {
             <th className="text-left p-2">Pair</th>
             <th className="text-left p-2">Type</th>
             <th className="text-left p-2">Side</th>
+            <th className="text-left p-2">Status</th>
             <th className="text-right p-2">Price</th>
             <th className="text-right p-2">Amount</th>
             <th className="text-right p-2">Total</th>
@@ -55,6 +87,11 @@ export function OrderHistory({ type }: OrderHistoryProps) {
                   }
                 >
                   {order.side}
+                </span>
+              </td>
+              <td className="p-2">
+                <span className={`text-xs ${getStatusStyle(order.status)}`}>
+                  {statusToString(order.status)}
                 </span>
               </td>
               <td className="p-2 text-right">{order.price?.toFixed(2)}</td>

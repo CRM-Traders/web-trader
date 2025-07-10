@@ -6,19 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useTradingStore } from "@/app/trading-view/store/tradingViewStore";
-import { Wallet, RefreshCw, Eye, EyeOff, ArrowDownLeft, ArrowUpRight, Clock } from "lucide-react";
-import { TicketModal } from "../TicketModal/TicketModal";
-import { TicketHistory } from "../TicketHistory/TicketHistory";
+import { Wallet, RefreshCw, Eye, EyeOff } from "lucide-react";
 
 export function WalletBalance() {
   const { walletBalances, loadWalletBalances, selectedSymbol } =
     useTradingStore();
   const [showAllBalances, setShowAllBalances] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [ticketModalOpen, setTicketModalOpen] = useState(false);
-  const [ticketHistoryOpen, setTicketHistoryOpen] = useState(false);
-  const [ticketType, setTicketType] = useState<"deposit" | "transfer">("deposit");
-  const [selectedCurrency, setSelectedCurrency] = useState<string>("");
 
   useEffect(() => {
     loadWalletBalances();
@@ -28,25 +22,6 @@ export function WalletBalance() {
     setIsRefreshing(true);
     await loadWalletBalances();
     setIsRefreshing(false);
-  };
-
-  const handleOpenTicketModal = (type: "deposit" | "transfer", currency?: string) => {
-    setTicketType(type);
-    setSelectedCurrency(currency || "");
-    setTicketModalOpen(true);
-  };
-
-  const handleCloseTicketModal = () => {
-    setTicketModalOpen(false);
-    setSelectedCurrency("");
-  };
-
-  const handleOpenTicketHistory = () => {
-    setTicketHistoryOpen(true);
-  };
-
-  const handleCloseTicketHistory = () => {
-    setTicketHistoryOpen(false);
   };
 
   // Get current trading pair currencies
@@ -79,15 +54,6 @@ export function WalletBalance() {
               Wallet Balance
             </CardTitle>
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleOpenTicketHistory}
-                className="h-7 px-2"
-                title="View Ticket History"
-              >
-                <Clock className="h-3 w-3" />
-              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -161,28 +127,6 @@ export function WalletBalance() {
                       </div>
                     )}
                   </div>
-                </div>
-
-                {/* Action buttons for each wallet */}
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleOpenTicketModal("deposit", wallet.currency)}
-                    className="flex-1 h-7 text-xs"
-                  >
-                    <ArrowDownLeft className="h-3 w-3 mr-1" />
-                    Deposit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleOpenTicketModal("transfer", wallet.currency)}
-                    className="flex-1 h-7 text-xs"
-                  >
-                    <ArrowUpRight className="h-3 w-3 mr-1" />
-                    Transfer
-                  </Button>
                 </div>
 
                 {wallet.totalBalance !== wallet.availableBalance && (
@@ -272,20 +216,6 @@ export function WalletBalance() {
           )}
         </CardContent>
       </Card>
-
-      {/* Ticket Modal */}
-      <TicketModal
-        isOpen={ticketModalOpen}
-        onClose={handleCloseTicketModal}
-        type={ticketType}
-        currency={selectedCurrency}
-      />
-
-      {/* Ticket History Modal */}
-      <TicketHistory
-        isOpen={ticketHistoryOpen}
-        onClose={handleCloseTicketHistory}
-      />
     </>
   );
 }

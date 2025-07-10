@@ -1,163 +1,213 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { postRefreshToken } from "@/app/api/auth/postRefreshToken";
+import { COOKIE_CONFIG } from "@/app/api/const/session";
 
-// Types for token refresh
-interface RefreshTokenResponse {
-  accessToken: string;
-  refreshToken?: string;
-  expires_in?: number;
-}
-
-interface ApiError {
-  message: string;
-  statusCode: number;
-}
-
-// Helper function to get token from cookies
-function getTokenFromCookies(request: NextRequest, tokenName: string): string | null {
-  const cookie = request.cookies.get(tokenName);
-  return cookie?.value || null;
-}
-
-// Helper function to set cookie in response
-function setCookieInResponse(response: NextResponse, name: string, value: string, options: any = {}) {
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict' as const,
-    path: '/',
-    ...options,
-  };
-  
-  response.cookies.set(name, value, cookieOptions);
-}
-
-// Helper function to check if token is expired (with 5 minute buffer)
-function isTokenExpired(token: string): boolean {
+const parseJwtSync = (token: string) => {
   try {
-    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-    const currentTime = Math.floor(Date.now() / 1000);
-    const bufferTime = 5 * 60; // 5 minutes buffer
-    return payload.exp < (currentTime + bufferTime);
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(base64));
   } catch (error) {
-    console.error('Error parsing token:', error);
-    return true; // Assume expired if we can't parse
-  }
-}
-
-// Function to refresh access token
-async function refreshAccessToken(accessToken: string, refreshToken: string): Promise<RefreshTokenResponse | null> {
-  try {
-    console.log('Attempting to refresh token...');
-    const response = await fetch(`${process.env.BASE_IDENTITY_URL}/api/auth/refresh-token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-      }),
-    });
-    console.log(response);
-
-    console.log('Refresh token response status:', response.status);
-    
-    if (response.ok) {
-      const data: RefreshTokenResponse = await response.json();
-      console.log('Token refresh successful');
-      return data;
-    } else {
-      const errorText = await response.text();
-      console.error('Failed to refresh token:', response.status, errorText);
-      return null;
-    }
-  } catch (error) {
-    console.error('Error refreshing token:', error);
+    console.error("Failed to decode JWT:", error);
     return null;
   }
-}
+};
+
+const isJWTExpiredSync = (token: string): boolean => {
+  const payload = parseJwtSync(token);
+  if (!payload || !payload.exp) return true;
+  return Date.now() >= payload.exp * 1000;
+};
 
 export async function middleware(request: NextRequest) {
-  // Only apply middleware to API routes that require authentication
+  const url = new URL(request.url);
+  const origin = url.origin;
+  const pathname = url.pathname;
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-url", request.url);
+  requestHeaders.set("x-origin", origin);
+  requestHeaders.set("x-pathname", pathname);
+
+  // Define protected paths for trading and dashboard
+  const protectedPaths = ["/trading-view"];
+
+  const isProtectedPath = protectedPaths.some((path) =>
+    request.nextUrl.pathname.startsWith(path)
+  );
+
+  // Handle API routes that require authentication
   const isApiRoute = request.nextUrl.pathname.startsWith('/api/');
   const isTradingApi = request.nextUrl.pathname.includes('/api/trading-accounts') || 
                       request.nextUrl.pathname.includes('/api/Trading') ||
                       request.nextUrl.pathname.includes('/api/Wallets');
+
+  // Check if there's a ctx parameter in the URL (ongoing authentication flow)
+  const hasCtxParam = request.nextUrl.searchParams.has('ctx');
+
+  // If accessing auth pages with valid session, redirect to dashboard
+  // if () {
+  //   const sessionCookie = request.cookies.get(COOKIE_CONFIG.SESSION.name);
+  //   if (sessionCookie) {
+  //     try {
+  //       const sessionData = JSON.parse(sessionCookie.value);
+  //       const { token } = sessionData;
+  //       if (token && !isJWTExpiredSync(token)) {
+  //         return NextResponse.redirect(new URL("/trading-view", request.url));
+  //       }
+  //     } catch {
+  //       // Invalid session, continue to auth page
+  //     }
+  //   }
+  //   return NextResponse.next();
+  // }
+
+  // Skip middleware for non-protected paths and non-trading API routes
+  if (!isProtectedPath && (!isApiRoute || !isTradingApi)) {
+    return NextResponse.next();
+  }
+
+  // Allow access to protected paths if there's a ctx parameter (ongoing auth flow)
+  if (hasCtxParam) {
+    console.log("\x1b[33m[CTX PARAM DETECTED]\x1b[0m Allowing access for authentication flow");
+    console.log("URL:", request.url);
+    console.log("Pathname:", pathname);
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  }
+
+  console.log("\x1b[36m[MIDDLEWARE DEBUG]\x1b[0m Processing request:", {
+    pathname,
+    isProtectedPath,
+    isApiRoute,
+    isTradingApi,
+    hasCtxParam,
+  });
+
+  const cookie = request.cookies.get(COOKIE_CONFIG.SESSION.name);
+  console.log("\x1b[36m[MIDDLEWARE DEBUG]\x1b[0m Session cookie exists:", !!cookie);
   
-  // Skip middleware for non-API routes or non-trading API routes
-  if (!isApiRoute || !isTradingApi) {
-    return NextResponse.next();
+  if (!cookie) {
+    console.log(
+      "\x1b[41m\x1b[97m[NO SESSION COOKIE]\x1b[0m Redirecting to login"
+    );
+    return NextResponse.redirect(new URL("https://online.salesvault.dev/login", request.url));
   }
 
-  // Get tokens from cookies
-  const accessToken = getTokenFromCookies(request, 'access_token');
-  const refreshToken = getTokenFromCookies(request, 'refresh_token');
-  console.log(accessToken, refreshToken);
-  console.log('Middleware processing:', request.nextUrl.pathname);
-  console.log('Access token exists:', !!accessToken);
-  console.log('Refresh token exists:', !!refreshToken);
-
-  // If no access token, redirect to sign-in
-  if (!accessToken) {
-    console.log('No access token found, redirecting to sign-in');
-    window.location.href = 'https://online.salesvault.dev/auth/login';
-    return NextResponse.next();
+  let sessionData;
+  try {
+    sessionData = JSON.parse(cookie.value);
+  } catch {
+    console.log(
+      "\x1b[41m\x1b[97m[INVALID SESSION DATA]\x1b[0m Redirecting to login"
+    );
+    const response = NextResponse.redirect(new URL("https://online.salesvault.dev/login", request.url));
+    response.cookies.delete(COOKIE_CONFIG.SESSION.name);
+    response.cookies.delete("access_token");
+    response.cookies.delete("refresh_token");
+    return response;
   }
 
-  // Check if access token is expired (proactive refresh)
-  if (isTokenExpired(accessToken)) {
-    console.log('Access token expired, attempting proactive refresh');
-    
-    // If no refresh token, redirect to sign-in
+  const { token, refreshToken } = sessionData;
+
+  const needsRefresh = isJWTExpiredSync(token);
+  if (needsRefresh) {
+    console.log("\x1b[44m\x1b[97m[TOKEN EXPIRED]\x1b[0m Trying refresh...");
     if (!refreshToken) {
-      console.log('No refresh token found, redirecting to sign-in');
-      window.location.href = 'https://online.salesvault.dev/auth/login';
-      return NextResponse.next();
+      console.log(
+        "\x1b[41m\x1b[97m[NO REFRESH TOKEN]\x1b[0m Redirecting to login"
+      );
+      const response = NextResponse.redirect(new URL("https://online.salesvault.dev/login", request.url));
+      response.cookies.delete(COOKIE_CONFIG.SESSION.name);
+      response.cookies.delete("access_token");
+      response.cookies.delete("refresh_token");
+      return response;
+    }
+    
+    const refreshed = await postRefreshToken(token, refreshToken);
+    if (
+      !refreshed.success ||
+      !refreshed.data?.accessToken ||
+      !refreshed.data?.refreshToken
+    ) {
+      console.log(
+        "\x1b[41m\x1b[97m[REFRESH FAILED]\x1b[0m Invalid refresh token"
+      );
+      const response = NextResponse.redirect(new URL("https://online.salesvault.dev/login", request.url));
+      response.cookies.delete(COOKIE_CONFIG.SESSION.name);
+      response.cookies.delete("access_token");
+      response.cookies.delete("refresh_token");
+      return response;
     }
 
-    // Attempt to refresh the token
-    const refreshResult = await refreshAccessToken(accessToken, refreshToken);
-    
-    if (refreshResult && refreshResult.accessToken) {
-      console.log('Token refreshed proactively');
-      
-      // Create response with updated cookies and forward the request
-      const response = NextResponse.next();
-      
-      // Set new access token
-      setCookieInResponse(response, 'access_token', refreshResult.accessToken, {
-        maxAge: refreshResult.expires_in || 60 * 60 * 24 * 7,
-      });
-      
-      // Set new refresh token if provided
-      if (refreshResult.refreshToken) {
-        setCookieInResponse(response, 'refresh_token', refreshResult.refreshToken, {
-          maxAge: 60 * 60 * 24 * 30,
-        });
+    console.log("\x1b[42m\x1b[30m[REFRESH SUCCESSFUL]\x1b[0m Token updated!");
+    // Set updated session with new tokens
+    const updatedSession = {
+      ...sessionData,
+      token: refreshed.data.accessToken,
+      refreshToken: refreshed.data.refreshToken,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const response = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+
+    response.cookies.set(
+      COOKIE_CONFIG.SESSION.name,
+      JSON.stringify(updatedSession),
+      {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 7,
+        path: "/",
       }
-      
-      // Add the new token to the request headers
-      request.headers.set('Authorization', `Bearer ${refreshResult.accessToken}`);
-      
-      return response;
-    } else {
-      console.log('Failed to refresh token proactively, redirecting to sign-in');
-      // Clear auth cookies and redirect to sign-in
-      const response = NextResponse.redirect(new URL('https://online.salesvault.dev/auth/login', request.url));
-      response.cookies.delete('access_token');
-      response.cookies.delete('refresh_token');
-      response.cookies.delete('user_info');
-      response.cookies.delete('auth_status');
-      return response;
+    );
+
+    response.cookies.set("access_token", refreshed.data.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 15,
+      path: "/",
+    });
+
+    response.cookies.set("refresh_token", refreshed.data.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7,
+      path: "/",
+    });
+
+    // Add the new token to the request headers for API routes
+    if (isApiRoute) {
+      requestHeaders.set('Authorization', `Bearer ${refreshed.data.accessToken}`);
     }
+
+    return response;
   }
 
-  // Token is valid, add it to the request headers and proceed
-  request.headers.set('Authorization', `Bearer ${accessToken}`);
-  return NextResponse.next();
+  console.log("\x1b[32m[TOKEN VALID]\x1b[0m Continuing request");
+  
+  // Add the token to the request headers for API routes
+  if (isApiRoute) {
+    requestHeaders.set('Authorization', `Bearer ${token}`);
+  }
+  
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 }
 
-// Configure which paths the middleware should run on
 export const config = {
   matcher: [
     /*
@@ -167,6 +217,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      */
-    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    "/((?!_next/static|_next/image|favicon.ico|public/).*)",
   ],
 }; 

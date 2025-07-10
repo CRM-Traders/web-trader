@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useState, useEffect } from "react";
-import { fetchWalletBalances, placeLimitOrder, placeMarketOrder, fetchOrders, fetchLimitOrders, fetchMarketOrders, fetchTickets } from "@/app/api/trading-accounts/actions";
+import { fetchWalletBalances, placeLimitOrder, placeMarketOrder, fetchOrders, fetchLimitOrders, fetchMarketOrders } from "@/app/api/trading-accounts/actions";
 
 // Types
 export interface MarketData {
@@ -32,19 +32,6 @@ export interface TradingAccount {
   wallets: WalletBalance[];
 }
 
-// Ticket interfaces
-export interface Ticket {
-  id: string;
-  tradingAccountId: string;
-  type: number; // 0 for Deposit, 1 for Withdraw
-  status: number; // 0-5 for different statuses
-  amount: number;
-  currency: string;
-  description?: string;
-  createdAt: string;
-  updatedAt?: string;
-}
-
 // Define the Order interface
 interface Order {
   id: string;
@@ -53,7 +40,7 @@ interface Order {
   type: "LIMIT" | "MARKET";
   price?: number;
   quantity: number;
-  status: string;
+  status: number; // 1=Pending, 2=PartiallyFilled, 3=Filled, 4=Cancelled, 5=Rejected
   createdAt: string;
 }
 
@@ -83,10 +70,6 @@ interface TradingState {
   // Wallet balances
   walletBalances: WalletBalance[];
 
-  // Tickets
-  tickets: Ticket[];
-  ticketHistory: Ticket[];
-
   // Actions
   setSelectedSymbol: (symbol: string) => void;
   setAvailableSymbols: (symbols: string[]) => void;
@@ -106,15 +89,11 @@ interface TradingState {
     currency: string,
     balance: Partial<WalletBalance>
   ) => void;
-  setTickets: (tickets: Ticket[]) => void;
-  setTicketHistory: (tickets: Ticket[]) => void;
-  addTicket: (ticket: Ticket) => void;
-  updateTicket: (ticketId: string, updates: Partial<Ticket>) => void;
   loadOrders: () => Promise<void>;
   loadLimitOrders: () => Promise<void>;
   loadMarketOrders: () => Promise<void>;
   loadWalletBalances: () => Promise<void>;
-  loadTickets: () => Promise<void>;
+
   placeOrder: (orderData: {
     symbol: string;
     side: "BUY" | "SELL";
@@ -126,7 +105,34 @@ interface TradingState {
 
 // Helper function to convert side to number
 const sideToNumber = (side: "BUY" | "SELL"): number => {
-  return side === "BUY" ? 1 : -1;
+  return side === "BUY" ? 1 : 2; // 1 for BUY, 2 for SELL (matching C# OrderSide enum)
+};
+
+// Helper function to convert type number to string
+const typeToString = (type: number): "LIMIT" | "MARKET" => {
+  return type === 2 ? "LIMIT" : "MARKET"; // 2 for LIMIT, 1 for MARKET
+};
+
+// Helper function to convert status number to string
+const statusToString = (status: number): string => {
+  switch (status) {
+    case 1: return "PENDING";
+    case 2: return "PARTIALLY_FILLED";
+    case 3: return "FILLED";
+    case 4: return "CANCELLED";
+    case 5: return "REJECTED";
+    default: return "UNKNOWN";
+  }
+};
+
+// Helper function to check if order is open/pending
+const isOrderOpen = (status: number): boolean => {
+  return status === 1 || status === 2; // Pending or PartiallyFilled
+};
+
+// Helper function to check if order is completed
+const isOrderCompleted = (status: number): boolean => {
+  return status === 3 || status === 4 || status === 5; // Filled, Cancelled, or Rejected
 };
 
 // Create store with persistence
@@ -148,8 +154,6 @@ export const useTradingStore = create<TradingState>()(
       chartType: "candles",
       chartIndicators: [],
       walletBalances: [],
-      tickets: [],
-      ticketHistory: [],
 
       // Actions
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
@@ -166,15 +170,6 @@ export const useTradingStore = create<TradingState>()(
       setChartType: (type) => set({ chartType: type }),
       setChartIndicators: (indicators) => set({ chartIndicators: indicators }),
       setWalletBalances: (balances) => set({ walletBalances: balances }),
-      setTickets: (tickets) => set({ tickets }),
-      setTicketHistory: (tickets) => set({ ticketHistory: tickets }),
-      addTicket: (ticket) => set((state) => ({ tickets: [...state.tickets, ticket] })),
-      updateTicket: (ticketId, updates) =>
-        set((state) => ({
-          tickets: state.tickets.map((ticket) =>
-            ticket.id === ticketId ? { ...ticket, ...updates } : ticket
-          ),
-        })),
 
       updateWalletBalance: (currency, updates) =>
         set((state) => ({
@@ -198,30 +193,33 @@ export const useTradingStore = create<TradingState>()(
           });
 
           if (ordersResponse.success && ordersResponse.data) {
+            console.log("Orders response in store:", ordersResponse.data);
+            
             // Convert the orders to match our interface
             const orders: Order[] = ordersResponse.data.map(order => ({
               id: order.id,
               symbol: order.symbol,
-              side: order.side === 1 ? "BUY" : "SELL",
-              type: order.type as "LIMIT" | "MARKET",
+              side: order.side === 1 ? "BUY" : "SELL", // 1 for BUY, 2 for SELL
+              type: typeToString(order.type),
               price: order.price,
               quantity: order.quantity,
               status: order.status,
               createdAt: order.createdAt,
             }));
 
+            console.log("Mapped orders:", orders);
+
             // Separate open orders from completed orders
-            const openOrders = orders.filter(order => 
-              order.status === "OPEN" || order.status === "PENDING" || order.status === "PARTIALLY_FILLED"
-            );
-            const completedOrders = orders.filter(order => 
-              order.status === "FILLED" || order.status === "CANCELLED" || order.status === "REJECTED"
-            );
+            const openOrders = orders.filter(order => isOrderOpen(order.status));
+            const completedOrders = orders.filter(order => isOrderCompleted(order.status));
+
+            console.log("Open orders:", openOrders);
+            console.log("Completed orders:", completedOrders);
 
             set({
               openOrders,
               orderHistory: completedOrders,
-              tradeHistory: completedOrders.filter(order => order.status === "FILLED"),
+              tradeHistory: completedOrders.filter(order => order.status === 3), // FILLED = 3
             });
           } else {
             console.error("Failed to load orders:", ordersResponse.error);
@@ -246,18 +244,21 @@ export const useTradingStore = create<TradingState>()(
           });
 
           if (ordersResponse.success && ordersResponse.data) {
+            console.log("Limit orders response in store:", ordersResponse.data);
+            
             // Convert the orders to match our interface
             const orders: Order[] = ordersResponse.data.map(order => ({
               id: order.id,
               symbol: order.symbol,
-              side: order.side === 1 ? "BUY" : "SELL",
-              type: order.type as "LIMIT" | "MARKET",
+              side: order.side === 1 ? "BUY" : "SELL", // 1 for BUY, 2 for SELL
+              type: typeToString(order.type),
               price: order.price,
               quantity: order.quantity,
               status: order.status,
               createdAt: order.createdAt,
             }));
 
+            console.log("Mapped limit orders:", orders);
             set({ limitOrders: orders });
           } else {
             console.error("Failed to load limit orders:", ordersResponse.error);
@@ -282,18 +283,21 @@ export const useTradingStore = create<TradingState>()(
           });
 
           if (ordersResponse.success && ordersResponse.data) {
+            console.log("Market orders response in store:", ordersResponse.data);
+            
             // Convert the orders to match our interface
             const orders: Order[] = ordersResponse.data.map(order => ({
               id: order.id,
               symbol: order.symbol,
-              side: order.side === 1 ? "BUY" : "SELL",
-              type: order.type as "LIMIT" | "MARKET",
+              side: order.side === 1 ? "BUY" : "SELL", // 1 for BUY, 2 for SELL
+              type: typeToString(order.type),
               price: order.price,
               quantity: order.quantity,
               status: order.status,
               createdAt: order.createdAt,
             }));
 
+            console.log("Mapped market orders:", orders);
             set({ marketOrders: orders });
           } else {
             console.error("Failed to load market orders:", ordersResponse.error);
@@ -318,23 +322,6 @@ export const useTradingStore = create<TradingState>()(
           }
         } catch (error) {
           console.error("Failed to load wallet balances:", error);
-        }
-      },
-
-      loadTickets: async () => {
-        try {
-          const { selectedAccount } = get();
-          if (!selectedAccount?.id) return;
-
-          // Call the API to fetch tickets
-          const response = await fetchTickets(selectedAccount.id); // Assuming fetchTickets is a new function
-          if (response.success && response.data) {
-            set({ tickets: response.data });
-          } else {
-            console.error("Failed to load tickets:", response.error);
-          }
-        } catch (error) {
-          console.error("Failed to load tickets:", error);
         }
       },
 
@@ -380,26 +367,33 @@ export const useTradingStore = create<TradingState>()(
           }
 
           // Prepare API request data
-          const apiData = {
-            tradingAccountId: selectedAccount.id,
-            symbol: orderData.symbol,
-            side: sideToNumber(orderData.side),
-            quantity: orderData.quantity,
-            ...(orderData.type === "LIMIT" && { price: orderData.price })
-          };
-
           let response;
           
           // Call the appropriate API function
           if (orderData.type === "LIMIT") {
-            response = await placeLimitOrder(apiData as any);
+            if (!orderData.price) {
+              throw new Error("Price is required for limit orders");
+            }
+            const limitOrderData = {
+              tradingAccountId: selectedAccount.id,
+              symbol: orderData.symbol,
+              side: sideToNumber(orderData.side),
+              quantity: orderData.quantity,
+              price: orderData.price,
+              type: 2 // LIMIT enum value
+            };
+            console.log("Sending LIMIT order:", limitOrderData);
+            response = await placeLimitOrder(limitOrderData);
           } else {
-            response = await placeMarketOrder({
-              tradingAccountId: apiData.tradingAccountId,
-              symbol: apiData.symbol,
-              side: apiData.side,
-              quantity: apiData.quantity
-            });
+            const marketOrderData = {
+              tradingAccountId: selectedAccount.id,
+              symbol: orderData.symbol,
+              side: sideToNumber(orderData.side),
+              quantity: orderData.quantity,
+              type: 1 // MARKET enum value
+            };
+            console.log("Sending MARKET order:", marketOrderData);
+            response = await placeMarketOrder(marketOrderData);
           }
 
           if (!response.success) {

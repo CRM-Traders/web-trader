@@ -149,6 +149,7 @@ export function TradingAccountModal({
         <h2 className="text-2xl font-semibold text-red-600">Error</h2>
         <p className="text-muted-foreground text-center">{error}</p>
         <Button onClick={fetchAccounts}>Try Again</Button>
+        <Button onClick={() => window.location.href = "https://online.salesvault.dev/login"}>Go to Login</Button>
       </div>
     );
   }

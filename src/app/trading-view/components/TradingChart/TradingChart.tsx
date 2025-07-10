@@ -106,7 +106,7 @@ export function TradingChart({ symbol }: TradingChartProps) {
         </div>
       )}
 
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between px-4 pb-3 border-b">
         <div className="flex items-center gap-2">
           <h3 className="font-medium">{symbol || "Select Market"}</h3>
           {marketData && symbol && (
