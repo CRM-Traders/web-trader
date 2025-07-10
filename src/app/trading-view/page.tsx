@@ -17,7 +17,7 @@ import {
   ArrowLeftRight,
 } from "lucide-react";
 import { useTradingWebSocket } from "./hooks/useTradingWebSocket";
-import { useHasHydrated, useTradingStore } from "./store/tradingViewStore";
+import { useHasHydrated, useTradingStore, clearAllTradingStoreData } from "./store/tradingViewStore";
 import { MarketSelector } from "./components/MarketSelector/MarketSelector";
 import { MarketStats } from "./components/MarketStats/MarketStats";
 import { TradingChart } from "./components/TradingChart/TradingChart";
@@ -165,6 +165,7 @@ function SpotTradingContent() {
     loadOrders,
     loadWalletBalances,
     walletBalances,
+    resetStore,
   } = useTradingStore();
   const hasHydrated = useHasHydrated();
   const [isLoading, setIsLoading] = useState(false);
@@ -181,6 +182,10 @@ function SpotTradingContent() {
       if (!ctx && isAuthenticated()) {
         setAuthStatus("authenticated");
         setUserInfo(getUserInfo());
+        
+        // Clear the store to ensure we don't load old data
+        clearAllTradingStoreData();
+        resetStore();
         return;
       }
 
@@ -198,6 +203,10 @@ function SpotTradingContent() {
         if (authResult) {
           setAuthStatus("authenticated");
           setUserInfo(getUserInfo());
+
+          // Clear the store when a new user authenticates
+          clearAllTradingStoreData();
+          resetStore();
 
           // Remove ctx from URL after successful authentication
           const url = new URL(window.location.href);
@@ -316,6 +325,9 @@ function SpotTradingContent() {
 
   const handleLogout = async () => {
     try {
+      // Clear all trading store data before logout
+      clearAllTradingStoreData();
+      resetStore();
       await logout();
     } catch (error) {
       console.error("Logout error:", error);

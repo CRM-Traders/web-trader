@@ -93,6 +93,7 @@ interface TradingState {
   loadLimitOrders: () => Promise<void>;
   loadMarketOrders: () => Promise<void>;
   loadWalletBalances: () => Promise<void>;
+  resetStore: () => void;
 
   placeOrder: (orderData: {
     symbol: string;
@@ -133,6 +134,28 @@ const isOrderOpen = (status: number): boolean => {
 // Helper function to check if order is completed
 const isOrderCompleted = (status: number): boolean => {
   return status === 3 || status === 4 || status === 5; // Filled, Cancelled, or Rejected
+};
+
+// Helper function to get user-specific storage key
+const getStorageKey = (): string => {
+  if (typeof window === "undefined") return "trading-store";
+  
+  try {
+    const cookies = document.cookie.split(";");
+    const userCookie = cookies.find((cookie) =>
+      cookie.trim().startsWith("user_info=")
+    );
+
+    if (userCookie) {
+      const userInfoStr = userCookie.split("=")[1];
+      const userInfo = JSON.parse(decodeURIComponent(userInfoStr));
+      return `trading-store-${userInfo.id}`;
+    }
+  } catch (error) {
+    console.error("Error getting user-specific storage key:", error);
+  }
+  
+  return "trading-store";
 };
 
 // Create store with persistence
@@ -177,6 +200,24 @@ export const useTradingStore = create<TradingState>()(
             wallet.currency === currency ? { ...wallet, ...updates } : wallet
           ),
         })),
+
+      // Reset store to initial state (useful when switching users)
+      resetStore: () => set({
+        selectedSymbol: "BTC/USDT",
+        availableSymbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"],
+        marketData: null,
+        selectedAccount: null,
+        accounts: [],
+        openOrders: [],
+        orderHistory: [],
+        tradeHistory: [],
+        limitOrders: [],
+        marketOrders: [],
+        chartTimeframe: "1D",
+        chartType: "candles",
+        chartIndicators: [],
+        walletBalances: [],
+      }),
 
       // Load orders from API
       loadOrders: async () => {
@@ -429,10 +470,22 @@ export const useTradingStore = create<TradingState>()(
       },
     }),
     {
-      name: "trading-store",
+      name: getStorageKey(),
     }
   )
 );
+
+// Function to clear all trading store data from localStorage
+export const clearAllTradingStoreData = () => {
+  if (typeof window === "undefined") return;
+  
+  // Clear all localStorage keys that start with "trading-store"
+  Object.keys(localStorage).forEach(key => {
+    if (key.startsWith("trading-store")) {
+      localStorage.removeItem(key);
+    }
+  });
+};
 
 // Hook to check if store has hydrated
 export function useHasHydrated() {
