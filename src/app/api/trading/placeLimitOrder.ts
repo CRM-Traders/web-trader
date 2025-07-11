@@ -30,10 +30,11 @@ export const placeLimitOrder = async (orderRequest: LimitOrderRequest) => {
 
   const limitOrderData = {
     ...orderRequest,
-    type: 2, // LIMIT enum value
   };
 
-  return apiFetcher<string>("traiding/api/Trading/order/limit", {
+  console.log(limitOrderData)
+
+  const response = await apiFetcher<string>("traiding/api/Trading/order/limit", {
     method: "POST",
     body: limitOrderData,
     fallbackErrorMessages: {
@@ -43,5 +44,9 @@ export const placeLimitOrder = async (orderRequest: LimitOrderRequest) => {
       409: "Order placement conflict",
       500: "Order placement service temporarily unavailable",
     },
-  });
+  })
+
+  console.log(response, ' - - - - RESPONSE - - - - - -')
+
+  return response
 };
