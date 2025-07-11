@@ -57,12 +57,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  console.log("\x1b[36m[MIDDLEWARE]\x1b[0m Processing:", {
-    pathname,
-    isPublicPath,
-    isProtectedPath,
-  });
-
   const ctx = url.searchParams.get("ctx");
   if (ctx && isProtectedPath) {
     console.log(

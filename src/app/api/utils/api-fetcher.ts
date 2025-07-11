@@ -1,164 +1,265 @@
-import { cookies } from "next/headers";
+"use server"
 
-// Import the getAccessToken function
+import { cookies } from "next/headers"
+import { logApiError, errorCodes } from "@/app/api/utils"
+
+/**
+ * Get access token from cookies with fallback logic
+ * First tries session cookie, then falls back to accessToken cookie
+ */
 const getAccessToken = async (): Promise<string | null> => {
   try {
-    const cookieStore = await cookies();
+    const cookieStore = await cookies()
+
     // First try to get from session cookie
-    const sessionCookie = cookieStore.get("session");
+    const sessionCookie = cookieStore.get("session")
     if (sessionCookie) {
       try {
-        const sessionData = JSON.parse(sessionCookie.value);
-        return sessionData.token || null;
+        const sessionData = JSON.parse(sessionCookie.value)
+        return sessionData.token || null
       } catch {
         // Invalid session data, fall back to individual cookie
       }
     }
+
     // Fall back to individual access token cookie
-    const token = cookieStore.get("accessToken");
-    return token?.value || null;
+    const token = cookieStore.get("accessToken")
+    return token?.value || null
   } catch (error) {
-    console.error("Error getting access token:", error);
-    return null;
+    console.error(error)
+    return null
   }
-};
+}
 
+/**
+ * API Response interface
+ */
 export interface ApiResponse<T> {
-  data: T | null;
-  error: string | null;
-  statusCode: number | null;
-  success: boolean;
+  data: T | null
+  error: string | null
+  statusCode: number | null
+  success: boolean
 }
 
+/**
+ * Fetcher options interface
+ */
 export interface FetcherOptions {
-  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
-  body?: Record<string, unknown> | string | FormData | null;
-  noAuth?: boolean;
-  fallbackErrorMessages?: { [key: number]: string };
-  headers?: HeadersInit;
+  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
+  body?: Record<string, unknown> | string | FormData | null
+  noAuth?: boolean
+  fallbackErrorMessages?: Record<number, string>
+  headers?: HeadersInit
+  cache?: RequestCache
+  next?: NextFetchRequestConfig
 }
 
+/**
+ * API Fetcher - A utility for making API requests in Next.js server actions
+ *
+ * This utility handles common API request patterns including:
+ * - Setting the base URL from environment variables
+ * - Adding authorization headers with token fallback logic
+ * - Handling different body types (JSON, FormData, string)
+ * - Consistent error handling with logging
+ * - Type-safe responses
+ *
+ * @template T - The expected data type of a successful response
+ * @param {string} endpoint - The API endpoint path (will be appended to API_URL)
+ * @param {FetcherOptions} options - Request options
+ * @returns {Promise<ApiResponse<T>>} - A standardized response object
+ *
+ * @example
+ * // Basic GET request
+ * const response = await apiFetcher<User[]>('/users')
+ *
+ * @example
+ * // POST request with body
+ * const response = await apiFetcher<User>('/users', {
+ *   method: 'POST',
+ *   body: { name: 'John', email: 'john@example.com' }
+ * })
+ *
+ * @example
+ * // With custom error messages
+ * const response = await apiFetcher<AuthResponse>('/auth/login', {
+ *   method: 'POST',
+ *   body: { username, password },
+ *   fallbackErrorMessages: {
+ *     401: 'Invalid username or password',
+ *     429: 'Too many login attempts, please try again later'
+ *   }
+ * })
+ */
 export const apiFetcher = async <T = unknown>(
   endpoint: string,
-  options: FetcherOptions = {}
+  options: FetcherOptions = {},
 ): Promise<ApiResponse<T>> => {
-  console.log("🌐 [apiFetcher] Making request to:", endpoint);
+  const baseUrl = process.env.API_URL
 
-  const baseUrl = process.env.API_URL;
-  console.log("🌐 [apiFetcher] Base URL:", baseUrl);
+  if (!baseUrl) {
+    await logApiError({
+      endpoint,
+      options,
+      rawErrorData: new Error("API_URL environment variable is not set"),
+      fallbackMessage: "Configuration error",
+    })
 
-  // Only get access token if auth is required
-  let accessToken = null;
-  if (!options.noAuth) {
-    accessToken = await getAccessToken();
-    console.log("🌐 [apiFetcher] Access token exists:", !!accessToken);
-    if (accessToken) {
-      console.log(
-        "🌐 [apiFetcher] Access token preview:",
-        accessToken.substring(0, 20) + "..."
-      );
+    return {
+      data: null,
+      error: "API configuration error",
+      statusCode: null,
+      success: false,
     }
   }
 
-  const defaultOptions: FetcherOptions = {
-    method: "GET",
-    headers: {
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-  };
+  // Get access token if auth is required
+  let accessToken = null
+  if (!options.noAuth) {
+    accessToken = await getAccessToken()
+  }
 
-  const url = `${baseUrl}/${endpoint}`;
-  console.log("🌐 [apiFetcher] Full URL:", url);
-
-  const headers: HeadersInit = {
+  // Merge default options with provided options
+  const defaultHeaders: HeadersInit = {
     "Content-Type": "application/json",
-    ...defaultOptions.headers,
-    ...options.headers,
-  };
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+  }
+
+  const mergedOptions = {
+    method: "GET" as const,
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...options.headers,
+    },
+    fallbackErrorMessages: {
+      ...errorCodes,
+      ...options.fallbackErrorMessages,
+    },
+  }
+
+  const url = `${baseUrl}/${endpoint.replace(/^\//, "")}`
 
   try {
-    console.log("🌐 [apiFetcher] Making fetch request...");
-
     // Handle different body types
-    let bodyContent: string | FormData | null = null;
-    if (options.body) {
-      if (
-        typeof options.body === "string" ||
-        options.body instanceof FormData
-      ) {
-        bodyContent = options.body;
+    let bodyContent: string | FormData | null = null
+    let finalHeaders = { ...mergedOptions.headers }
+
+    if (mergedOptions.body) {
+      if (typeof mergedOptions.body === "string" || mergedOptions.body instanceof FormData) {
+        bodyContent = mergedOptions.body
+        // Remove Content-Type for FormData to let browser set it with boundary
+        if (mergedOptions.body instanceof FormData) {
+          const { "Content-Type": _, ...headersWithoutContentType } = finalHeaders as Record<string, string>
+          finalHeaders = headersWithoutContentType
+        }
       } else {
-        bodyContent = JSON.stringify(options.body);
+        bodyContent = JSON.stringify(mergedOptions.body)
       }
     }
 
     const response = await fetch(url, {
-      method: options.method || defaultOptions.method,
-      headers: headers,
+      method: mergedOptions.method,
+      headers: finalHeaders,
       body: bodyContent,
-    });
+      cache: mergedOptions.cache,
+      next: mergedOptions.next,
+    })
 
-    const statusCode = response.status;
-    console.log("🌐 [apiFetcher] Response status:", statusCode);
-
-    let data = null;
-    let error = null;
+    const statusCode = response.status
 
     if (response.ok) {
+      let data = null
+
       try {
-        data = await response.json();
-        console.log("🌐 [apiFetcher] Response data received:", !!data);
-      } catch (jsonError) {
-        // If the response is 204 No Content, then return null data
+        const contentType = response.headers.get("content-type")
+
         if (statusCode === 204) {
-          data = null;
+          // No Content response
+          data = null
+        } else if (contentType && contentType.includes("application/json")) {
+          data = await response.json()
         } else {
-          error = "Failed to parse JSON response";
-          console.log("🌐 [apiFetcher] JSON parse error:", jsonError);
+          // Handle non-JSON responses
+          data = await response.text()
+        }
+      } catch (parseError) {
+        await logApiError({
+          endpoint,
+          options: mergedOptions,
+          response,
+          rawErrorData: parseError,
+          fallbackMessage: "Failed to parse successful response",
+        })
+
+        return {
+          data: null,
+          error: "Failed to parse response data",
+          statusCode,
+          success: false,
         }
       }
+
+      return {
+        data: data as T,
+        error: null,
+        statusCode,
+        success: true,
+      }
     } else {
-      let errorMessage = `Request failed with status ${statusCode}`;
+      // Handle error responses
+      let errorMessage = `Request failed with status ${statusCode}`
+      let errorData = null
 
       try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
-        console.log("🌐 [apiFetcher] Error response:", errorData);
-      } catch (jsonError) {
-        console.log("🌐 [apiFetcher] Could not parse error response");
+        const contentType = response.headers.get("content-type")
+
+        if (contentType && contentType.includes("application/json")) {
+          errorData = await response.json()
+          errorMessage = errorData.message || errorData.error || errorMessage
+        } else {
+          const textResponse = await response.text()
+          errorMessage = textResponse || errorMessage
+        }
+      } catch (parseError) {
+        // Could not parse error response, use fallback
       }
 
-      if (
-        options.fallbackErrorMessages &&
-        options.fallbackErrorMessages[statusCode]
-      ) {
-        errorMessage = options.fallbackErrorMessages[statusCode];
+      // Use fallback error message if available
+      if (mergedOptions.fallbackErrorMessages?.[statusCode]) {
+        errorMessage = mergedOptions.fallbackErrorMessages[statusCode]
       }
 
-      error = errorMessage;
+      await logApiError({
+        endpoint,
+        options: mergedOptions,
+        response,
+        rawErrorData: errorData,
+        fallbackMessage: errorMessage,
+      })
+
+      return {
+        data: null,
+        error: errorMessage,
+        statusCode,
+        success: false,
+      }
     }
+  } catch (networkError) {
+    const errorMessage = networkError instanceof Error ? networkError.message : "An unexpected network error occurred"
 
-    console.log("🌐 [apiFetcher] Final result:", {
-      success: response.ok && !error,
-      error,
-      hasData: !!data,
-    });
+    await logApiError({
+      endpoint,
+      options: mergedOptions,
+      rawErrorData: networkError,
+      fallbackMessage: errorMessage,
+    })
 
-    return {
-      data: data as T,
-      error,
-      statusCode,
-      success: response.ok && !error,
-    };
-  } catch (e: unknown) {
-    console.error("🌐 [apiFetcher] Network error:", e);
-    const errorMessage =
-      e instanceof Error ? e.message : "An unexpected error occurred";
     return {
       data: null,
       error: errorMessage,
       statusCode: null,
       success: false,
-    };
+    }
   }
-};
+}
