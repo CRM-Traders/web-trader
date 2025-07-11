@@ -23,7 +23,7 @@ export function TradingChart({ symbol }: TradingChartProps) {
   const [isLoading, setIsLoading] = useState(true);
   const { marketData } = useTradingStore();
 
-  // Format symbol for TradingView (e.g., BTC/USDT -> BINANCE:BTCUSDT)
+  // Format symbol for TradingView (e.g., BTCUSDT -> BINANCE:BTCUSDT)
   const formatSymbolForTradingView = (sym: string) => {
     if (!sym) return "BINANCE:BTCUSDT";
     return `BINANCE:${sym.replace("/", "")}`;

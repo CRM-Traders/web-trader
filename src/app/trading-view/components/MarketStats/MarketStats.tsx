@@ -8,7 +8,6 @@ interface MarketStatsProps {
 
 export function MarketStats({ symbol }: MarketStatsProps) {
   const { marketData } = useTradingStore();
-
   if (!marketData) {
     return null;
   }

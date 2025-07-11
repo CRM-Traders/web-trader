@@ -12,6 +12,7 @@ import {
   placeMarketOrder,
 } from "@/app/api/trading"
 import type { Order, WalletDto, LimitOrderRequest, MarketOrderRequest } from "@/app/api/types/trading"
+import type { MarketSymbol } from "@/app/api/trading/fetchMarketSymbols"
 
 // Store-specific interfaces
 export interface MarketData {
@@ -45,7 +46,7 @@ interface TradingState {
   authTimestamp: number | null
   // Market data
   selectedSymbol: string
-  availableSymbols: string[]
+  availableSymbols: MarketSymbol[]
   marketData: MarketData | null
   // Account
   selectedAccount: TradingAccount | null
@@ -70,7 +71,7 @@ interface TradingState {
   setCurrentUserId: (userId: string | null) => void
   setAuthTimestamp: (timestamp: number | null) => void
   setSelectedSymbol: (symbol: string) => void
-  setAvailableSymbols: (symbols: string[]) => void
+  setAvailableSymbols: (symbols: MarketSymbol[]) => void
   setMarketData: (data: MarketData) => void
   setSelectedAccount: (account: TradingAccount | null) => void
   setAccounts: (accounts: TradingAccount[]) => void
@@ -112,12 +113,12 @@ const mapWalletDtoToWalletBalance = (wallet: WalletDto): WalletBalance => ({
   lastPriceUpdate: wallet.lastPriceUpdate,
 })
 
-const isOrderOpen = (status: string): boolean => {
-  return status === "PENDING" || status === "PARTIALLY_FILLED"
+const isOrderOpen = (status: number): boolean => {
+  return status === 1 || status === 2 // PENDING or PARTIALLY_FILLED
 }
 
-const isOrderCompleted = (status: string): boolean => {
-  return status === "FILLED" || status === "CANCELLED" || status === "REJECTED"
+const isOrderCompleted = (status: number): boolean => {
+  return status === 3 || status === 4 || status === 5 // FILLED, CANCELLED, or REJECTED
 }
 
 import type { OrderSide } from "@/app/api/types/trading"
@@ -181,8 +182,8 @@ export const useTradingStore = create<TradingState>()(
       // Default values
       currentUserId: null,
       authTimestamp: null,
-      selectedSymbol: "BTC/USDT",
-      availableSymbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"],
+      selectedSymbol: "",
+      availableSymbols: [],
       marketData: null,
       selectedAccount: null,
       accounts: [],
@@ -272,16 +273,17 @@ export const useTradingStore = create<TradingState>()(
         try {
           const response = await fetchOrders({
             tradingAccountId: selectedAccount.id,
+            status: "",
             symbol: selectedSymbol,
-            pageIndex: 1,
+            pageIndex: 0,
             pageSize: 100,
           })
-
+          
           if (response.success && response.data) {
             const orders = response.data
             const openOrders = orders.filter((order: any) => isOrderOpen(order.status))
             const completedOrders = orders.filter((order: any) => isOrderCompleted(order.status))
-            const tradeHistory = completedOrders.filter((order: any) => order.status === "FILLED")
+            const tradeHistory = completedOrders.filter((order: any) => order.status === 3) // FILLED = 3
 
             set({
               openOrders,
@@ -308,8 +310,9 @@ export const useTradingStore = create<TradingState>()(
         try {
           const response = await fetchLimitOrders({
             tradingAccountId: selectedAccount.id,
+            status: "",
             symbol: selectedSymbol,
-            pageIndex: 1,
+            pageIndex: 0,
             pageSize: 100,
           })
 
@@ -327,7 +330,7 @@ export const useTradingStore = create<TradingState>()(
       },
 
       loadMarketOrders: async () => {
-        const { selectedAccount, selectedSymbol } = get()
+        const { selectedAccount } = get()
         if (!selectedAccount?.id) return
 
         set({ isLoadingOrders: true })
@@ -335,8 +338,9 @@ export const useTradingStore = create<TradingState>()(
         try {
           const response = await fetchMarketOrders({
             tradingAccountId: selectedAccount.id,
-            symbol: selectedSymbol,
-            pageIndex: 1,
+            status: "",
+            symbol: "",
+            pageIndex: 0,
             pageSize: 100,
           })
 
@@ -377,7 +381,7 @@ export const useTradingStore = create<TradingState>()(
       },
 
       placeOrder: async (orderData) => {
-        const { selectedAccount, walletBalances, loadWalletBalances, loadOrders } = get()
+        const { selectedAccount, walletBalances, loadWalletBalances, loadOrders, availableSymbols } = get()
 
         if (!selectedAccount?.id) {
           console.error("No trading account selected")
@@ -387,8 +391,15 @@ export const useTradingStore = create<TradingState>()(
         set({ isPlacingOrder: true })
 
         try {
-          // Pre-flight balance check
-          const [baseCurrency, quoteCurrency] = orderData.symbol.split("/")
+          // Find the market symbol to get base and quote currencies
+          const marketSymbol = availableSymbols.find(s => s.symbol === orderData.symbol)
+          if (!marketSymbol) {
+            console.error(`Market symbol not found: ${orderData.symbol}`)
+            set({ isPlacingOrder: false })
+            return false
+          }
+
+          const { baseAsset: baseCurrency, quoteAsset: quoteCurrency } = marketSymbol
 
           if (orderData.side === "BUY") {
             const quoteWallet = walletBalances.find((w) => w.currency === quoteCurrency)
@@ -466,8 +477,8 @@ export const useTradingStore = create<TradingState>()(
         set({
           currentUserId: null,
           authTimestamp: null,
-          selectedSymbol: "BTC/USDT",
-          availableSymbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"],
+          selectedSymbol: "",
+          availableSymbols: [],
           marketData: null,
           selectedAccount: null,
           accounts: [],

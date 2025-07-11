@@ -48,6 +48,7 @@ export function TradePanel({
   quoteCurrency,
   onOrderPlaced,
 }: TradePanelProps) {
+  
   const [orderType, setOrderType] = useState<"limit" | "market">("limit");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [price, setPrice] = useState<string>("");
@@ -139,6 +140,12 @@ export function TradePanel({
   };
 
   const handleAmountChange = (value: string) => {
+    // Prevent negative values
+    const numValue = Number.parseFloat(value);
+    if (numValue < 0) {
+      return; // Don't update if negative
+    }
+    
     setAmount(value);
 
     const amountNum = Number.parseFloat(value || "0");
@@ -173,6 +180,12 @@ export function TradePanel({
   };
 
   const handleTotalChange = (value: string) => {
+    // Prevent negative values
+    const numValue = Number.parseFloat(value);
+    if (numValue < 0) {
+      return; // Don't update if negative
+    }
+    
     setTotal(value);
 
     const totalNum = Number.parseFloat(value || "0");
@@ -213,34 +226,38 @@ export function TradePanel({
         return;
       }
 
-      // if (orderType === "limit") {
-      //   if (side === "buy") {
-      //     const requiredQuote =
-      //       Number.parseFloat(price) * Number.parseFloat(amount);
-      //     if (requiredQuote > quoteBalance) {
-      //       toast.error(`Insufficient ${quoteCurrency} balance`);
-      //       return;
-      //     }
-      //   } else {
-      //     if (Number.parseFloat(amount) > baseBalance) {
-      //       toast.error(`Insufficient ${baseCurrency} balance`);
-      //       return;
-      //     }
-      //   }
-      // } else {
-      //   if (side === "buy") {
-      //     if (Number.parseFloat(amount) > quoteBalance) {
-      //       toast.error(`Insufficient ${quoteCurrency} balance`);
-      //       return;
-      //     }
-      //   } else {
-      //     if (Number.parseFloat(amount) > baseBalance) {
-      //       toast.error(`Insufficient ${baseCurrency} balance`);
-      //       return;
-      //     }
-      //   }
-      // }
-
+      if (orderType === "limit") {
+        if (side === "buy") {
+          const requiredQuote =
+            Number.parseFloat(price) * Number.parseFloat(amount);
+          if (requiredQuote > quoteBalance) {
+            toast.error(`Insufficient ${quoteCurrency} balance`);
+            return;
+          }
+        } else {
+          if (Number.parseFloat(amount) > baseBalance) {
+            toast.error(`Insufficient ${baseCurrency} balance`);
+            return;
+          }
+        }
+      } else {
+        if (side === "buy") {
+          if (Number.parseFloat(amount) > quoteBalance) {
+            toast.error(`Insufficient ${quoteCurrency} balance`);
+            return;
+          }
+        } else {
+          if (Number.parseFloat(amount) > baseBalance) {
+            toast.error(`Insufficient ${baseCurrency} balance`);
+            return;
+          }
+        }
+      }
+      console.log("selectedSymbol", selectedSymbol)
+      console.log("side", side)
+      console.log("orderType", orderType)
+      console.log("price", price)
+      console.log("amount", amount)
       await placeOrder({
         symbol: selectedSymbol,
         side: side.toUpperCase() as "BUY" | "SELL",
@@ -273,14 +290,10 @@ export function TradePanel({
   };
 
   const getAvailableBalance = () => {
-    if (orderType === "market") {
-      return side === "buy"
-        ? `${quoteBalance.toFixed(2)} ${quoteCurrency}`
-        : `${baseBalance.toFixed(8)} ${baseCurrency}`;
+    if (side === "buy") {
+      return `${quoteBalance.toFixed(2)} ${quoteCurrency}`;
     } else {
-      return side === "buy"
-        ? `${quoteBalance.toFixed(2)} ${quoteCurrency}`
-        : `${baseBalance.toFixed(8)} ${baseCurrency}`;
+      return `${baseBalance.toFixed(8)} ${baseCurrency}`;
     }
   };
 
@@ -336,15 +349,21 @@ export function TradePanel({
                   Price
                 </label>
                 <span className="text-xs text-muted-foreground">
-                  {quoteCurrency}
+                  {baseCurrency}
                 </span>
               </div>
               <Input
                 id="price"
                 type="number"
+                min="0"
                 placeholder="0.00"
                 value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                onChange={(e) => {
+                  const value = Number.parseFloat(e.target.value);
+                  if (value >= 0 || e.target.value === "") {
+                    setPrice(e.target.value);
+                  }
+                }}
                 disabled={isPlacingOrder}
               />
             </div>
@@ -362,6 +381,7 @@ export function TradePanel({
               <Input
                 id="amount"
                 type="number"
+                min="0"
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => handleAmountChange(e.target.value)}
@@ -406,6 +426,7 @@ export function TradePanel({
               <Input
                 id="total"
                 type="number"
+                min="0"
                 placeholder="0.00"
                 value={total}
                 onChange={(e) => handleTotalChange(e.target.value)}
@@ -423,14 +444,13 @@ export function TradePanel({
             <div className="space-y-2">
               <div className="flex justify-between">
                 <label htmlFor="market-amount" className="text-sm">
-                  {side === "buy"
-                    ? `Amount (${quoteCurrency})`
-                    : `Amount (${baseCurrency})`}
+                  {side === "buy" ? quoteCurrency : baseCurrency}
                 </label>
               </div>
               <Input
                 id="market-amount"
                 type="number"
+                min="0"
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => handleAmountChange(e.target.value)}

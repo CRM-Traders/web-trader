@@ -14,6 +14,7 @@ export function useTradingWebSocket() {
       // For demo purposes, we'll use Binance public WebSocket
       // In production, replace with your actual WebSocket endpoint
       const formattedSymbol = selectedSymbol.replace("/", "").toLowerCase();
+      console.log("----- formattedSymbol ------  ", formattedSymbol)
       const ws = new WebSocket(
         `wss://stream.binance.com:9443/ws/${formattedSymbol}@ticker`
       );
@@ -37,6 +38,8 @@ export function useTradingWebSocket() {
         try {
           const data = JSON.parse(event.data);
           // Format the data to match our MarketData interface
+      console.log("----- formattedSymbol ------  ", formattedSymbol)
+
           setMarketData({
             symbol: selectedSymbol,
             lastPrice: Number.parseFloat(data.c).toFixed(2),

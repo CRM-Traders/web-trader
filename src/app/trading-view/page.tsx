@@ -22,10 +22,10 @@ import {
   useTradingStore,
   clearAllTradingStoreData,
 } from "./store/tradingViewStore";
+import type { MarketSymbol } from "@/app/api/trading/fetchMarketSymbols";
 import { MarketSelector } from "./components/MarketSelector/MarketSelector";
 import { MarketStats } from "./components/MarketStats/MarketStats";
 import { TradingChart } from "./components/TradingChart/TradingChart";
-import { OrderHistory } from "./components/OrderHistory/OrderHistory";
 import { ChartAnalysisPanel } from "./components/ChartAnalysisPanel/ChartAnalysisPanel";
 import { OrderBook } from "./components/OrderBook/OrderBook";
 import { TradePanel } from "./components/TradePanel/TradePanel";
@@ -38,7 +38,10 @@ import {
   logout,
   postConfirmAuth,
 } from "../api/auth";
-import { fetchTradingAccounts } from "../api/trading";
+import { fetchTradingAccounts } from "../api/trading/fetchTradingAccounts";
+import { fetchMarketSymbols } from "../api/trading/fetchMarketSymbols";
+import { OpenOrder } from "./components/OpenOrder/OpenOrder";
+import { TradeHistory } from "./components/TradeHistory/TradeHistory";
 
 // Authentication loading component
 function AuthenticationLoader() {
@@ -168,8 +171,10 @@ function SpotTradingContent() {
     selectedSymbol,
     marketData,
     selectedAccount,
+    availableSymbols,
     setSelectedAccount,
     setAccounts,
+    setAvailableSymbols,
     loadOrders,
     loadWalletBalances,
     walletBalances,
@@ -180,23 +185,34 @@ function SpotTradingContent() {
   const [showSettings, setShowSettings] = useState(false);
 
   const { isConnected } = useTradingWebSocket();
-
   // Handle authentication on component mount
   useEffect(() => {
     const handleAuth = async () => {
       const ctx = searchParams.get("ctx");
-      console.log("Authentication context:", ctx);
+
       // Check if already authenticated (from cookies)
       if (!ctx && isAuthenticated()) {
         setAuthStatus("authenticated");
         setUserInfo(getUserInfo());
 
-        // Clear the store to ensure we don't load old data
-        clearAllTradingStoreData();
-        resetStore();
+        // Load and set first account
+        const accounts = await fetchTradingAccounts();
+        console.log("accounts", accounts.data?.[0]?.id);
+        if (accounts.success && accounts.data && accounts.data.length > 0) {
+          const firstAccount = {
+            id: accounts.data[0].id,
+            name: accounts.data[0].displayName,
+            wallets: []
+          };
+          console.log("🔄 Setting first account:", firstAccount);
+          setSelectedAccount(firstAccount);
+          setAccounts([firstAccount]);
+          setAccountsLoaded(true);
+        }
         return;
       }
-
+      const accounts = await fetchTradingAccounts();
+      console.log("accounts", accounts.data?.[0]?.id)
       // if (!ctx) {
       //   window.location.href = "https://online.salesvault.dev/login";
       //   // No ctx parameter and not authenticated, redirect to sign-in
@@ -211,10 +227,21 @@ function SpotTradingContent() {
         if (authResult) {
           setAuthStatus("authenticated");
           setUserInfo(getUserInfo());
-
-          // Clear the store when a new user authenticates
-          clearAllTradingStoreData();
-          resetStore();
+          
+          // Load and set first account
+          const accounts = await fetchTradingAccounts();
+          console.log("accounts after auth", accounts.data?.[0]?.id);
+          if (accounts.success && accounts.data && accounts.data.length > 0) {
+            const firstAccount = {
+              id: accounts.data[0].id,
+              name: accounts.data[0].displayName,
+              wallets: []
+            };
+            console.log("🔄 Setting first account after auth:", firstAccount);
+            setSelectedAccount(firstAccount);
+            setAccounts([firstAccount]);
+            setAccountsLoaded(true);
+          }
 
           // Remove ctx from URL after successful authentication
           const url = new URL(window.location.href);
@@ -256,6 +283,12 @@ function SpotTradingContent() {
 
     handleAuth();
   }, [searchParams, router]);
+  // Load market symbols after authentication
+  useEffect(() => {
+    if (authStatus === "authenticated" && hasHydrated && availableSymbols.length === 0) {
+      loadMarketSymbols();
+    }
+  }, [authStatus, hasHydrated, availableSymbols.length]);
 
   // Load trading accounts after authentication
   useEffect(() => {
@@ -289,6 +322,37 @@ function SpotTradingContent() {
     showAccountSelection,
   ]);
 
+  const loadMarketSymbols = async () => {
+    try {
+      const result = await fetchMarketSymbols({
+        pageSize: 100,
+        pageIndex: 0,
+      });
+
+      console.log("Market symbols result:", result);
+      if (result.success && result.data) {
+        const symbols = Array.isArray(result.data) ? result.data : [];
+        setAvailableSymbols(symbols);
+
+        // If we have symbols and the current selectedSymbol doesn't exist, auto-select the first one
+        if (symbols.length > 0) {
+          const symbolExists = symbols.some(s => `${s.baseAsset}/${s.quoteAsset}` === selectedSymbol);
+          if (!symbolExists) {
+            const firstSymbol = `${symbols[0].baseAsset}/${symbols[0].quoteAsset}`;
+            console.log(`🔄 Auto-selecting first available symbol: ${firstSymbol}`);
+            useTradingStore.getState().setSelectedSymbol(firstSymbol);
+          }
+        }
+      } else {
+        console.error("Failed to load market symbols:", result.error);
+        toast.error("Failed to load market symbols");
+      }
+    } catch (error) {
+      console.error("Failed to load market symbols:", error);
+      toast.error("Failed to load market symbols");
+    }
+  };
+
   const loadTradingAccounts = async () => {
     try {
       const result = await fetchTradingAccounts();
@@ -301,9 +365,12 @@ function SpotTradingContent() {
         }));
         setAccounts(transformedAccounts);
         setAccountsLoaded(true);
-
-        // Don't automatically select any account - let the user choose
-        // This prevents automatic selection
+        console.log(transformedAccounts)
+        // Automatically select the first account if available
+        if (transformedAccounts.length > 0 && !selectedAccount) {
+          console.log(`🔄 Auto-selecting first account: ${transformedAccounts[0].name}`);
+          setSelectedAccount(transformedAccounts[0]);
+        }
       }
     } catch (error) {
       console.error("Failed to load trading accounts:", error);
@@ -317,6 +384,12 @@ function SpotTradingContent() {
 
     try {
       setIsLoading(true);
+
+      // Load market symbols if not already loaded
+      if (availableSymbols.length === 0) {
+        await loadMarketSymbols();
+      }
+
       await loadWalletBalances();
       await loadOrders();
     } catch (error) {
@@ -396,33 +469,38 @@ function SpotTradingContent() {
   }
 
   // Don't show trading interface if no account is selected
-  if (!selectedAccount) {
-    return (
-      <div className="flex h-[calc(100vh-200px)] items-center justify-center">
-        <div className="text-center space-y-4">
-          <Wallet className="w-16 h-16 text-muted-foreground mx-auto" />
-          <h2 className="text-2xl font-semibold">
-            No Trading Account Selected
-          </h2>
-          <p className="text-muted-foreground">
-            Please select a trading account to continue
-          </p>
-          <Button onClick={handleSwitchAccount}>
-            <Wallet className="h-4 w-4 mr-2" />
-            Select Account
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // if (!selectedAccount) {
+  //   return (
+  //     <div className="flex h-[calc(100vh-200px)] items-center justify-center">
+  //       <div className="text-center space-y-4">
+  //         <Wallet className="w-16 h-16 text-muted-foreground mx-auto" />
+  //         <h2 className="text-2xl font-semibold">
+  //           No Trading Account Selected
+  //         </h2>
+  //         <p className="text-muted-foreground">
+  //           Please select a trading account to continue
+  //         </p>
+  //         <Button onClick={handleSwitchAccount}>
+  //           <Wallet className="h-4 w-4 mr-2" />
+  //           Select Account
+  //         </Button>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
-  // Get current trading pair balances
-  const [baseCurrency, quoteCurrency] = selectedSymbol.split("/");
+  // Get current trading pair balances from MarketSymbol data
+  const selectedMarketSymbol = availableSymbols.find((s: MarketSymbol) => `${s.baseAsset}/${s.quoteAsset}` === selectedSymbol);
+
+  const baseCurrency = selectedMarketSymbol?.baseAsset || "";
+  const quoteCurrency = selectedMarketSymbol?.quoteAsset || "";
+
   const baseWallet = walletBalances.find((w) => w.currency === baseCurrency);
   const quoteWallet = walletBalances.find((w) => w.currency === quoteCurrency);
 
+
   return (
-    <div className="h-[calc(100vh-120px)] flex flex-col p-4 mb-4">
+    <div className="h-[calc(100vh-120px)] flex flex-col p-4">
       {/* Market Header */}
       <div className="flex items-center justify-between mb-4">
         <MarketSelector />
@@ -432,7 +510,7 @@ function SpotTradingContent() {
           {/* Account Info with Switch Button */}
           <div className="flex items-center gap-2 px-3 py-1 bg-muted rounded-lg">
             <Wallet className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium">{selectedAccount.name}</span>
+            <span className="text-sm font-medium">{selectedAccount?.name || "No account selected"}</span>
             <Button
               variant="ghost"
               size="sm"
@@ -445,9 +523,8 @@ function SpotTradingContent() {
 
           <div className="flex items-center gap-2 text-xs">
             <div
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? "bg-green-500" : "bg-red-500"
-              }`}
+              className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"
+                }`}
             />
             <span className="text-muted-foreground">
               {isConnected ? "Live" : "Disconnected"}
@@ -487,37 +564,31 @@ function SpotTradingContent() {
           </Card>
 
           {/* Orders */}
-          <Card className="h-[calc(100%-32.2rem)]">
+          <Card className="h-[calc(100%-32.2rem)] max-h-[535px]">
             <Tabs defaultValue="openOrders" className="h-full mx-3">
               <TabsList className="w-full justify-start">
-                <TabsTrigger value="openOrders">Open Orders</TabsTrigger>
-                <TabsTrigger value="orderHistory">Order History</TabsTrigger>
                 <TabsTrigger value="tradeHistory">Trade History</TabsTrigger>
+                <TabsTrigger value="openOrders">Open Orders</TabsTrigger>
               </TabsList>
-              <TabsContent
-                value="openOrders"
-                className="h-[calc(100%-40px)] overflow-auto"
-              >
-                <OrderHistory type="open" />
-              </TabsContent>
-              <TabsContent
-                value="orderHistory"
-                className="h-[calc(100%-40px)] overflow-auto"
-              >
-                <OrderHistory type="history" />
-              </TabsContent>
+
               <TabsContent
                 value="tradeHistory"
-                className="h-[calc(100%-40px)] overflow-auto"
+                className="max-h-[calc(100%-40px)] overflow-auto"
               >
-                <OrderHistory type="trades" />
+                <TradeHistory type="all" />
+              </TabsContent>
+              <TabsContent
+                value="openOrders"
+                className="max-h-[calc(100%-40px)] overflow-auto"
+              >
+                <OpenOrder type="open" />
               </TabsContent>
             </Tabs>
           </Card>
         </div>
 
         {/* Right Column - Analysis, Order Book & Trade Panel */}
-        <div className="col-span-12 lg:col-span-4 space-y-4">
+        <div className="col-span-12 lg:col-span-4 space-y-4 mb-10">
           {/* Chart Analysis Panel */}
           <ChartAnalysisPanel
             symbol={selectedSymbol}

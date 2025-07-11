@@ -83,7 +83,7 @@ export interface Order {
   type: OrderType;
   price?: number;
   quantity: number;
-  status: OrderStatus;
+  status: status;
   createdAt: string;
   updatedAt?: string;
   filledQuantity?: number;
@@ -101,7 +101,7 @@ export enum OrderType {
   LIMIT = 2,
 }
 
-export enum OrderStatus {
+export enum status {
   PENDING = 1,
   PARTIALLY_FILLED = 2,
   FILLED = 3,
@@ -126,7 +126,7 @@ export interface MarketOrderRequest {
 
 export interface FetchOrdersRequest {
   tradingAccountId: string;
-  status?: string;
+  status?: number | null;
   symbol?: string;
   pageIndex?: number;
   pageSize?: number;

@@ -4,7 +4,7 @@ import { apiFetcher } from "@/app/api/utils/api-fetcher";
 import { TradingAccountDto } from "../types/trading";
 
 export const fetchTradingAccounts = async () => {
-  return apiFetcher<TradingAccountDto[]>("traiding/api/TradingAccounts/user", {
+  const result = await apiFetcher<TradingAccountDto[]>("traiding/api/TradingAccounts/user", {
     method: "GET",
     fallbackErrorMessages: {
       401: "Authentication required to access trading accounts",
@@ -13,4 +13,5 @@ export const fetchTradingAccounts = async () => {
       500: "Trading accounts service temporarily unavailable",
     },
   });
+  return result;
 };

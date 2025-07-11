@@ -8,3 +8,4 @@ export { placeMarketOrder } from "./placeMarketOrder";
 export { fetchOrders } from "./fetchOrders";
 export { fetchLimitOrders } from "./fetchLimitOrders";
 export { fetchMarketOrders } from "./fetchMarketOrders";
+export { deleteOrder } from "./deleteOrder";

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useTradingStore } from "@/app/trading-view/store/tradingViewStore";
+import { fetchOrders } from "@/app/api/trading/fetchOrders";
 
 // Helper function to convert status number to string
 const statusToString = (status: number): string => {
@@ -39,25 +41,70 @@ const getStatusStyle = (status: number): string => {
 };
 
 interface OrderHistoryProps {
-  type: "open" | "history" | "trades";
+  type: "open" | "all";
 }
 
-export function OrderHistory({ type }: OrderHistoryProps) {
-  const { openOrders, orderHistory, tradeHistory } = useTradingStore();
+export function TradeHistory({ type }: OrderHistoryProps) {
+  const { selectedAccount } = useTradingStore();
+  const [fetchedOrders, setFetchedOrders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // Fetch orders directly from API
+  useEffect(() => {
+    const loadOrders = async () => {
+      if (!selectedAccount?.id) {
+        setError("No trading account selected");
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetchOrders({
+          tradingAccountId: selectedAccount.id,
+          pageIndex: 0,
+          pageSize: 100,
+        });
+
+        if (response.success && response.data) {
+          setFetchedOrders(response.data);
+        } else {
+          setError(response.error || "Failed to fetch orders");
+        }
+      } catch (err) {
+        setError("Failed to fetch orders");
+        console.error("Error fetching orders:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadOrders();
+  }, [selectedAccount?.id]);
+
+  // Use fetched orders for history, fallback to store for other types
   const orders =
-    type === "open"
-      ? openOrders
-      : type === "history"
-      ? orderHistory
-      : tradeHistory;
+    type === "all"
+      ? fetchedOrders
+      : fetchedOrders;
 
-  console.log(`OrderHistory component - type: ${type}`, {
-    openOrders,
-    orderHistory,
-    tradeHistory,
-    selectedOrders: orders,
-  });
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-muted-foreground text-sm">Loading orders...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-red-500 text-sm">Error: {error}</p>
+      </div>
+    );
+  }
 
   if (orders.length === 0) {
     return (
@@ -84,22 +131,22 @@ export function OrderHistory({ type }: OrderHistoryProps) {
           </tr>
         </thead>
         <tbody>
-          {orders.map((order) => (
+          {fetchedOrders.map((order) => (
             <tr key={order.id} className="border-b hover:bg-muted/50">
               <td className="p-2 text-xs">
                 {new Date(order.createdAt).toLocaleString()}
               </td>
-              <td className="p-2">{order.symbol}</td>
-              <td className="p-2">{order.type}</td>
+              <td className="p-2">{order.symbol?.replace(/([A-Z]+)([A-Z]+)/, '$1/$2')}</td>
+              <td className="p-2">{order.type === 1 ? "MARKET" : "LIMIT"}</td>
               <td className="p-2">
                 <span
                   className={
-                    String(order.side) === "BUY"
+                    order.side === 1
                       ? "text-green-500"
                       : "text-red-500"
                   }
                 >
-                  {order.side}
+                  {order.side === 1 ? "BUY" : "SELL"}
                 </span>
               </td>
               <td className="p-2">

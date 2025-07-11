@@ -71,7 +71,7 @@ export const fetchOrders = async (request: FetchOrdersRequest) => {
     tradingAccountId,
     status,
     symbol,
-    pageIndex = 1,
+    pageIndex = 0,
     pageSize = 50,
   } = request;
 
@@ -88,8 +88,8 @@ export const fetchOrders = async (request: FetchOrdersRequest) => {
     tradingAccountId: tradingAccountId,
     pageIndex: pageIndex.toString(),
     pageSize: pageSize.toString(),
-    status: status || "",
-    symbol: symbol || "",
+    status: "",
+    symbol: "",
   });
 
   const response = await apiFetcher<any>(

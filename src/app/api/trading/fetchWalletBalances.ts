@@ -13,7 +13,7 @@ export const fetchWalletBalances = async (tradingAccountId: string) => {
     };
   }
 
-  return apiFetcher<WalletDto[]>(`traiding/api/Wallets/${tradingAccountId}`, {
+  const response = await apiFetcher<WalletDto[]>(`traiding/api/Wallets/${tradingAccountId}`, {
     method: "GET",
     fallbackErrorMessages: {
       401: "Authentication required to access wallets",
@@ -22,4 +22,5 @@ export const fetchWalletBalances = async (tradingAccountId: string) => {
       500: "Wallets service temporarily unavailable",
     },
   });
+  return response;
 };

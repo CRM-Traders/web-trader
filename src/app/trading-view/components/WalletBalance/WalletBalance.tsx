@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useTradingStore } from "@/app/trading-view/store/tradingViewStore";
+import type { MarketSymbol } from "@/app/api/trading/fetchMarketSymbols";
 import { Wallet, RefreshCw, Eye, EyeOff } from "lucide-react";
 
 export function WalletBalance() {
-  const { walletBalances, loadWalletBalances, selectedSymbol } =
+  const { walletBalances, loadWalletBalances, selectedSymbol, availableSymbols } =
     useTradingStore();
-  const [showAllBalances, setShowAllBalances] = useState(false);
+  const [showAllBalances, setShowAllBalances] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
@@ -24,10 +25,48 @@ export function WalletBalance() {
     setIsRefreshing(false);
   };
 
-  // Get current trading pair currencies
-  const [baseCurrency, quoteCurrency] = selectedSymbol
-    ? selectedSymbol.split("/")
-    : ["BTC", "USDT"];
+  // Wait for market symbols to be loaded before proceeding
+  if (availableSymbols.length === 0) {
+    return (
+      <Card className="gap-0">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Wallet className="h-4 w-4" />
+            Wallet Balance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-4 text-muted-foreground text-sm">
+            Loading market symbols...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Get current trading pair currencies from MarketSymbol data
+  const selectedMarketSymbol = availableSymbols.find((s: MarketSymbol) => `${s.baseAsset}/${s.quoteAsset}` === selectedSymbol);
+  if (!selectedMarketSymbol?.baseAsset || !selectedMarketSymbol?.quoteAsset) {
+    console.error(`Market symbol not found: ${selectedSymbol}`);
+    return (
+      <Card className="gap-0">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Wallet className="h-4 w-4" />
+            Wallet Balance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-4 text-muted-foreground text-sm">
+            Symbol not available
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  const baseCurrency = selectedMarketSymbol.baseAsset;
+  const quoteCurrency = selectedMarketSymbol.quoteAsset;
 
   // Filter balances for current trading pair
   const tradingPairBalances = walletBalances.filter(
@@ -46,7 +85,7 @@ export function WalletBalance() {
 
   return (
     <>
-      <Card>
+      <Card className="gap-0">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -80,7 +119,7 @@ export function WalletBalance() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="">
           {displayBalances.length === 0 ? (
             <div className="text-center py-4 text-muted-foreground text-sm">
               No balances to display
@@ -88,9 +127,8 @@ export function WalletBalance() {
           ) : (
             displayBalances.map((wallet, index) => (
               <div
-                key={`${wallet.currency}-${wallet.id || "unknown"}-${
-                  wallet.lastPriceUpdate || Date.now()
-                }-${index}`}
+                key={`${wallet.currency}-${wallet.id || "unknown"}-${wallet.lastPriceUpdate || Date.now()
+                  }-${index}`}
                 className="space-y-2"
               >
                 <div className="flex items-center justify-between">
@@ -98,10 +136,10 @@ export function WalletBalance() {
                     <span className="font-medium text-sm">{wallet.currency}</span>
                     {(wallet.currency === baseCurrency ||
                       wallet.currency === quoteCurrency) && (
-                      <Badge variant="outline" className="text-xs h-4">
-                        Trading
-                      </Badge>
-                    )}
+                        <Badge variant="outline" className="text-xs h-4">
+                          Trading
+                        </Badge>
+                      )}
                     {wallet.usdEquivalent > 0 && (
                       <Badge variant="secondary" className="text-xs h-4">
                         ${wallet.usdEquivalent.toFixed(2)}
@@ -204,14 +242,16 @@ export function WalletBalance() {
                   USD
                 </span>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAllBalances(false)}
-                className="h-6 px-2 text-xs"
-              >
-                Show Trading Pairs Only
-              </Button>
+              <div className="flex justify-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAllBalances(false)}
+                  className="h-6 px-2 text-xs mx-auto"
+                >
+                  Show Trading Pairs Only
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
