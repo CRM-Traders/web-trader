@@ -66,7 +66,7 @@ const mapApiOrderToOrder = (apiOrder: any): Order => {
   };
 };
 
-export const fetchOrders = async (request: FetchOrdersRequest) => {
+export const fetchOpenOrders = async (request: FetchOrdersRequest) => {
   const {
     tradingAccountId,
     status,
@@ -88,7 +88,7 @@ export const fetchOrders = async (request: FetchOrdersRequest) => {
     tradingAccountId: tradingAccountId,
     pageIndex: pageIndex.toString(),
     pageSize: pageSize.toString(),
-    status: "",
+    status: "1",
     symbol: "",
   });
 
