@@ -139,9 +139,12 @@ export function TradePanel({
   };
 
   const handleAmountChange = (value: string) => {
-    setAmount(value);
+    // Ensure the value is not negative
+    const numericValue = Number.parseFloat(value || "0");
+    const positiveValue = Math.max(0, numericValue).toString();
+    setAmount(positiveValue);
 
-    const amountNum = Number.parseFloat(value || "0");
+    const amountNum = Number.parseFloat(positiveValue || "0");
 
     if (orderType === "limit") {
       if (side === "buy") {
@@ -173,9 +176,12 @@ export function TradePanel({
   };
 
   const handleTotalChange = (value: string) => {
-    setTotal(value);
+    // Ensure the value is not negative
+    const numericValue = Number.parseFloat(value || "0");
+    const positiveValue = Math.max(0, numericValue).toString();
+    setTotal(positiveValue);
 
-    const totalNum = Number.parseFloat(value || "0");
+    const totalNum = Number.parseFloat(positiveValue || "0");
     const priceNum = Number.parseFloat(price || "0");
 
     if (priceNum > 0 && totalNum > 0) {
@@ -342,9 +348,16 @@ export function TradePanel({
               <Input
                 id="price"
                 type="number"
+                min="0"
+                step="any"
                 placeholder="0.00"
                 value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  const numericValue = Number.parseFloat(value || "0");
+                  const positiveValue = Math.max(0, numericValue).toString();
+                  setPrice(positiveValue);
+                }}
                 disabled={isPlacingOrder}
               />
             </div>
@@ -362,6 +375,8 @@ export function TradePanel({
               <Input
                 id="amount"
                 type="number"
+                min="0"
+                step="any"
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => handleAmountChange(e.target.value)}
@@ -406,6 +421,8 @@ export function TradePanel({
               <Input
                 id="total"
                 type="number"
+                min="0"
+                step="any"
                 placeholder="0.00"
                 value={total}
                 onChange={(e) => handleTotalChange(e.target.value)}
@@ -431,6 +448,8 @@ export function TradePanel({
               <Input
                 id="market-amount"
                 type="number"
+                min="0"
+                step="any"
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => handleAmountChange(e.target.value)}

@@ -226,8 +226,8 @@ export const apiFetcher = async <T = unknown>(
       }
 
       // Use fallback error message if available
-      if (mergedOptions.fallbackErrorMessages?.[statusCode]) {
-        errorMessage = mergedOptions.fallbackErrorMessages[statusCode]
+      if (mergedOptions.fallbackErrorMessages && statusCode in mergedOptions.fallbackErrorMessages) {
+        errorMessage = mergedOptions.fallbackErrorMessages[statusCode as keyof typeof mergedOptions.fallbackErrorMessages]
       }
 
       await logApiError({
