@@ -88,9 +88,8 @@ export function WalletBalance() {
           ) : (
             displayBalances.map((wallet, index) => (
               <div
-                key={`${wallet.currency}-${wallet.id || "unknown"}-${
-                  wallet.lastPriceUpdate || Date.now()
-                }-${index}`}
+                key={`${wallet.currency}-${wallet.id || "unknown"}-${wallet.lastPriceUpdate || Date.now()
+                  }-${index}`}
                 className="space-y-2"
               >
                 <div className="flex items-center justify-between">
@@ -98,10 +97,10 @@ export function WalletBalance() {
                     <span className="font-medium text-sm">{wallet.currency}</span>
                     {(wallet.currency === baseCurrency ||
                       wallet.currency === quoteCurrency) && (
-                      <Badge variant="outline" className="text-xs h-4">
-                        Trading
-                      </Badge>
-                    )}
+                        <Badge variant="outline" className="text-xs h-4">
+                          Trading
+                        </Badge>
+                      )}
                     {wallet.usdEquivalent > 0 && (
                       <Badge variant="secondary" className="text-xs h-4">
                         ${wallet.usdEquivalent.toFixed(2)}
@@ -204,17 +203,16 @@ export function WalletBalance() {
                   USD
                 </span>
               </div>
-
-                    <div className="flex justify-center">
-                    <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAllBalances(false)}
-                className="h-6 px-2 text-xs"
-              >
-                Show Trading Pairs Only
-              </Button>
-                    </div>
+              <div className="flex justify-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAllBalances(false)}
+                  className="h-6 px-2 text-xs"
+                >
+                  Show Trading Pairs Only
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

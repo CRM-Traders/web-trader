@@ -83,7 +83,6 @@ export function TradeHistory({ type }: OrderHistoryProps) {
 
     loadOrders();
   }, [selectedAccount?.id]);
-
   // Use fetched orders for history, fallback to store for other types
   const orders =
     type === "all"
@@ -136,7 +135,7 @@ export function TradeHistory({ type }: OrderHistoryProps) {
               <td className="p-2 text-xs">
                 {new Date(order.createdAt).toLocaleString()}
               </td>
-              <td className="p-2">{order.symbol?.replace(/([A-Z]+)([A-Z]+)/, '$1/$2')}</td>
+              <td className="p-2">{order.symbol}</td>
               <td className="p-2">{order.type === 1 ? "MARKET" : "LIMIT"}</td>
               <td className="p-2">
                 <span

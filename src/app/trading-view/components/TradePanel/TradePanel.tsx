@@ -66,6 +66,10 @@ export function TradePanel({
     marketOrders,
   } = useTradingStore();
 
+  if(baseCurrency == '') {
+    baseCurrency = selectedSymbol.split('/')[0];
+  }
+
   useEffect(() => {
     const loadOrders = async () => {
       await loadLimitOrders();
@@ -219,33 +223,33 @@ export function TradePanel({
         return;
       }
 
-      // if (orderType === "limit") {
-      //   if (side === "buy") {
-      //     const requiredQuote =
-      //       Number.parseFloat(price) * Number.parseFloat(amount);
-      //     if (requiredQuote > quoteBalance) {
-      //       toast.error(`Insufficient ${quoteCurrency} balance`);
-      //       return;
-      //     }
-      //   } else {
-      //     if (Number.parseFloat(amount) > baseBalance) {
-      //       toast.error(`Insufficient ${baseCurrency} balance`);
-      //       return;
-      //     }
-      //   }
-      // } else {
-      //   if (side === "buy") {
-      //     if (Number.parseFloat(amount) > quoteBalance) {
-      //       toast.error(`Insufficient ${quoteCurrency} balance`);
-      //       return;
-      //     }
-      //   } else {
-      //     if (Number.parseFloat(amount) > baseBalance) {
-      //       toast.error(`Insufficient ${baseCurrency} balance`);
-      //       return;
-      //     }
-      //   }
-      // }
+      // Check balance before placing order
+      if (orderType === "limit") {
+        if (side === "buy") {
+          const requiredQuote = Number.parseFloat(price) * Number.parseFloat(amount);
+          if (requiredQuote > quoteBalance) {
+            toast.error(`Insufficient ${quoteCurrency} balance. Required: ${requiredQuote.toFixed(2)}, Available: ${quoteBalance.toFixed(2)}`);
+            return;
+          }
+        } else {
+          if (Number.parseFloat(amount) > baseBalance) {
+            toast.error(`Insufficient ${baseCurrency} balance. Required: ${Number.parseFloat(amount).toFixed(8)}, Available: ${baseBalance.toFixed(8)}`);
+            return;
+          }
+        }
+      } else {
+        if (side === "buy") {
+          if (Number.parseFloat(amount) > quoteBalance) {
+            toast.error(`Insufficient ${quoteCurrency} balance. Required: ${Number.parseFloat(amount).toFixed(2)}, Available: ${quoteBalance.toFixed(2)}`);
+            return;
+          }
+        } else {
+          if (Number.parseFloat(amount) > baseBalance) {
+            toast.error(`Insufficient ${baseCurrency} balance. Required: ${Number.parseFloat(amount).toFixed(8)}, Available: ${baseBalance.toFixed(8)}`);
+            return;
+          }
+        }
+      }
 
       await placeOrder({
         symbol: selectedSymbol,
@@ -294,20 +298,38 @@ export function TradePanel({
     if (!amount || Number.parseFloat(amount) <= 0) return false;
     if (orderType === "limit" && (!price || Number.parseFloat(price) <= 0))
       return false;
+    
+    // Check if user has sufficient balance
+    const amountNum = Number.parseFloat(amount);
+    if (orderType === "limit") {
+      if (side === "buy") {
+        const requiredQuote = Number.parseFloat(price || "0") * amountNum;
+        if (requiredQuote > quoteBalance) return false;
+      } else {
+        if (amountNum > baseBalance) return false;
+      }
+    } else {
+      if (side === "buy") {
+        if (amountNum > quoteBalance) return false;
+      } else {
+        if (amountNum > baseBalance) return false;
+      }
+    }
+    
     return true;
   };
 
   return (
     <div className="h-full flex flex-col">
       <Tabs
-        defaultValue="limit"
-        onValueChange={(value) => setOrderType(value as "limit" | "market")}
+        defaultValue="market"
+        onValueChange={(value) => setOrderType(value as "market" | "limit")}
         className="flex-1 py-0"
       >
         <div className="flex items-center justify-between px-3 pb-4 border-b">
           <TabsList>
-            <TabsTrigger value="limit">Limit</TabsTrigger>
             <TabsTrigger value="market">Market</TabsTrigger>
+            <TabsTrigger value="limit">Limit</TabsTrigger>
           </TabsList>
         </div>
 
