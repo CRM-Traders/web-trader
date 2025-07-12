@@ -469,8 +469,9 @@ function SpotTradingContent() {
       <div className="flex items-center justify-between mb-4">
         <MarketSelector />
         <div className="flex items-center gap-4">
-          <MarketStats symbol={selectedSymbol} />
-
+          <div className="hidden md:block">
+            <MarketStats symbol={selectedSymbol} />
+          </div>
           {/* Account Info with Switch Button */}
           <div className="flex items-center gap-2 px-3 py-1 bg-muted rounded-lg">
             <Wallet className="w-4 h-4 text-muted-foreground" />
@@ -497,7 +498,7 @@ function SpotTradingContent() {
 
           {/* User Info */}
           {userInfo && (
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-sm hidden md:block">
               <User className="w-4 h-4 text-muted-foreground" />
               <span className="text-muted-foreground">
                 {userInfo.name || userInfo.email}
@@ -509,6 +510,7 @@ function SpotTradingContent() {
             variant="outline"
             size="sm"
             onClick={() => setShowSettings(true)}
+            className="hidden md:block"
           >
             <Settings className="h-4 w-4" />
           </Button>

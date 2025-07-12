@@ -11,7 +11,7 @@ import { Wallet, RefreshCw, Eye, EyeOff } from "lucide-react";
 export function WalletBalance() {
   const { walletBalances, loadWalletBalances, selectedSymbol } =
     useTradingStore();
-  const [showAllBalances, setShowAllBalances] = useState(false);
+  const [showAllBalances, setShowAllBalances] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function WalletBalance() {
 
   return (
     <>
-      <Card>
+      <Card className="gap-0">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -94,7 +94,7 @@ export function WalletBalance() {
                 className="space-y-2"
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm">{wallet.currency}</span>
                     {(wallet.currency === baseCurrency ||
                       wallet.currency === quoteCurrency) && (
@@ -204,7 +204,9 @@ export function WalletBalance() {
                   USD
                 </span>
               </div>
-              <Button
+
+                    <div className="flex justify-center">
+                    <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowAllBalances(false)}
@@ -212,6 +214,7 @@ export function WalletBalance() {
               >
                 Show Trading Pairs Only
               </Button>
+                    </div>
             </div>
           )}
         </CardContent>
