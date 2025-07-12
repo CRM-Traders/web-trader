@@ -434,7 +434,7 @@ export const useTradingStore = create<TradingState>()(
               side: sideToOrderSide(orderData.side),
               quantity: orderData.quantity,
             }
-
+            
             response = await placeMarketOrder(marketOrderRequest)
           }
 
