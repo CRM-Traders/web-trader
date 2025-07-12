@@ -531,7 +531,7 @@ function SpotTradingContent() {
 
           {/* Orders */}
           <Card className="h-[calc(100%-32.2rem)] max-h-[535px]">
-            <Tabs defaultValue="openOrders" className="h-full mx-3">
+            <Tabs defaultValue="tradeHistory" className="h-full mx-3">
               <TabsList className="w-full justify-start">
                 <TabsTrigger value="tradeHistory">Trade History</TabsTrigger>
                 <TabsTrigger value="openOrders">Open Orders</TabsTrigger>
