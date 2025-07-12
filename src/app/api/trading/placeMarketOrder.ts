@@ -23,8 +23,9 @@ export const placeMarketOrder = async (orderRequest: MarketOrderRequest) => {
 
   const marketOrderData = {
     ...orderRequest,
-    type: 1,
   };
+
+  console.log("Market order data:", marketOrderData)
 
   return apiFetcher<string>("traiding/api/Trading/order/market", {
     method: "POST",

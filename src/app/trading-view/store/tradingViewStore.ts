@@ -434,7 +434,7 @@ export const useTradingStore = create<TradingState>()(
               side: sideToOrderSide(orderData.side),
               quantity: orderData.quantity,
             }
-
+            
             response = await placeMarketOrder(marketOrderRequest)
           }
 
@@ -489,12 +489,14 @@ export const useTradingStore = create<TradingState>()(
     {
       name: "trading-store",
       partialize: (state) => {
-        // Only persist non-user-specific settings
+        // Persist non-user-specific settings and account selection
         return {
           selectedSymbol: state.selectedSymbol,
           chartTimeframe: state.chartTimeframe,
           chartType: state.chartType,
           chartIndicators: state.chartIndicators,
+          selectedAccount: state.selectedAccount,
+          accounts: state.accounts,
         }
       },
       storage: {
